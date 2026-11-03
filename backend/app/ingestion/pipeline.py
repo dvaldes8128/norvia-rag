@@ -104,7 +104,9 @@ def detect_filename_conflict(
     )
 
 
-def soft_delete_live_chunks(session: Session, *, document_id: UUID, when: datetime | None = None) -> int:
+def soft_delete_live_chunks(
+    session: Session, *, document_id: UUID, when: datetime | None = None
+) -> int:
     stamp = when or datetime.now(UTC)
     result = session.execute(
         update(Chunk)
@@ -115,7 +117,7 @@ def soft_delete_live_chunks(session: Session, *, document_id: UUID, when: dateti
 
 
 def soft_delete_document(session: Session, *, document_id: UUID) -> Document | None:
-    """Mark document + live chunks inactive. Returns the document or None if missing/already gone."""
+    """Soft-delete a live document and its chunks; None if missing or already deleted."""
     document = session.get(Document, document_id)
     if document is None or document.deleted_at is not None:
         return None

@@ -94,7 +94,11 @@ def test_filename_replace_soft_deletes_old_chunks(pg_engine, tmp_path: Path) -> 
         )
         # Old flood chunks are soft-deleted; theft policy should dominate.
         assert all(h.document_id == first.document_id for h in hits) if hits else True
-        floodish = [h for h in hits if "flood" in h.content.lower() and "fifty thousand" in h.content.lower()]
+        floodish = [
+            h
+            for h in hits
+            if "flood" in h.content.lower() and "fifty thousand" in h.content.lower()
+        ]
         assert floodish == []
 
 
