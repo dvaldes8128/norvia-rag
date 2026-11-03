@@ -8,10 +8,10 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.config import settings
-from app.db.base import Base
 
 # Import models so metadata is populated for autogenerate.
 from app.db import models  # noqa: F401
+from app.db.base import Base
 
 # Migrations run as the admin (owner) role; the app uses a restricted role at runtime.
 config = context.config
