@@ -199,8 +199,8 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 
 ## Known limitations
 
-- Chunk text is reconstructed from alphanumeric tokens (lowercased) — citations work
-  but lose original punctuation/casing. Planned fix: slice original page text by offsets.
+- Chunk windows are sized with ``tiktoken`` (``cl100k_base``); stored text is a slice of
+  the original PDF page content (offsets), so citations keep punctuation/casing/accents.
 - Traces export to **console** by default (set `OTEL_EXPORTER_OTLP_ENDPOINT` to ship to a
   collector); no bundled Jaeger/Tempo in the compose stack to keep it light.
 - Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).

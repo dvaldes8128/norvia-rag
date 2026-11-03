@@ -12,7 +12,7 @@
 | 2 | Real LLM/embeddings provider | **Custom adapter** (not LiteLLM) | Env-configurable real provider behind our own interface; default stays the deterministic fake. Avoids LiteLLM as a dependency; we own the timeout/retry/rate-limit logic. |
 | 3 | Tenant auth | **API key + JWT (both)** | Support both schemes: API key for simple service-to-service/tenant access, JWT for session-based auth. Both resolve to a tenant identity enforced downstream (RLS). |
 | 4 | Multi-tenant isolation (D2) | **Row-Level Security (RLS)** in PostgreSQL | Strongest default against cross-tenant leaks; policy enforced at DB regardless of app bugs. Trade-off: more setup + per-connection `SET` of tenant; accepted for the security guarantee. |
-| 5 | Chunking (D1, initial) | **800–1000 tokens, 15–20% overlap** | Starting point; will tune against recall@k and record evidence here. |
+| 5 | Chunking (D1) | **tiktoken cl100k + original-text offsets**; 900/150 | Size in BPE tokens; store PDF substrings (not token-join). Fake emb uses Unicode words. |
 | 6 | Python deps | **uv** | Fast, lockfile, reproducible. |
 | 7 | Frontend | **Vite + React + TypeScript** | Lightweight SPA; TS as recommended by brief. |
 | 8 | Integration tests (Q1.2) | **Docker Compose** (real PG + pgvector) | Reuse the same compose stack for integration tests rather than testcontainers. |
@@ -27,10 +27,15 @@
 - Chunk size/overlap: starting at **900 tokens / 150 overlap** (~17%), within the
   agreed 800–1000 / 15–20% band (decision #5). Tunable via `CHUNK_SIZE_TOKENS` /
   `CHUNK_OVERLAP_TOKENS`.
-- **Tokenizer:** same alphanumeric regex as the fake embeddings provider (not
-  tiktoken) so offline chunk boundaries and lexical similarity stay aligned.
-  Chunks stream across page boundaries; `page_number` is the page of the first
-  token (citation-friendly).
+- **Tokenizer (chunk sizing):** ``tiktoken`` ``cl100k_base``. Windows slide on
+  token ids; stored ``content`` is a **character slice of the original page
+  text** (UTF-8 byte→char offsets via ``decode_single_token_bytes``), so
+  punctuation, casing and accents survive for citations. Chunks may span pages;
+  ``page_number`` is the page of the first character in the slice.
+- **Fake embeddings tokenizer (separate):** Unicode word pieces
+  (``[^\W_]+`` / ``casefold``) over that sliced text — keeps Spanish tokens like
+  ``póliza`` for offline lexical similarity without forcing bag-of-words to match
+  BPE boundaries.
 - Retrieval: **hybrid** — candidate pool = union of top-N by pgvector cosine
   distance and top-N by `ts_rank` on generated `content_tsv` (GIN). Scores are
   min-max normalised per channel, then fused with

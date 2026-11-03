@@ -22,11 +22,12 @@ from collections.abc import Iterator
 
 from app.providers.base import LLMResult
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
+# Unicode letters + digits (keeps ``póliza``); separate from tiktoken chunk sizing.
+_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def _tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(text.lower())
+    return [m.group(0).casefold() for m in _TOKEN_RE.finditer(text)]
 
 
 class FakeEmbeddings:

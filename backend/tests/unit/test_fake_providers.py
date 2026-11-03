@@ -39,6 +39,16 @@ def test_lexical_overlap_drives_similarity() -> None:
     assert _cosine(base, similar) > _cosine(base, unrelated)
 
 
+def test_embeddings_keep_spanish_words() -> None:
+    emb = FakeEmbeddings(dim=256)
+    with_accent = emb.embed(["póliza de daños por agua"])[0]
+    same = emb.embed(["póliza de daños por agua"])[0]
+    ascii_broken = emb.embed(["poliza de danos por agua"])[0]
+    assert with_accent == same
+    # Accented form must not collapse to the ASCII lookalike vector.
+    assert with_accent != ascii_broken
+
+
 def test_fake_llm_grounds_answer_in_context() -> None:
     llm = FakeLLM()
     prompt = (
