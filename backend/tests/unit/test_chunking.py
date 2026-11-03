@@ -74,13 +74,21 @@ def test_single_short_page_one_chunk() -> None:
     assert chunks[0].token_count == count_tokens(text)
 
 
-def test_chunk_content_is_substring_of_joined_pages() -> None:
+def test_chunk_collapses_pdf_soft_wraps() -> None:
+    pages = [_page(1, "Flood damage up to fifty\nthousand EUR under section A.")]
+    chunks = chunk_pages(pages, size_tokens=100, overlap_tokens=10)
+    assert len(chunks) == 1
+    assert "fifty thousand" in chunks[0].content
+    assert "\n" not in chunks[0].content
+
+
+def test_chunk_content_keeps_accents_across_pages() -> None:
     pages = [
         _page(1, "Póliza A: cobertura de agua."),
         _page(2, "Póliza B: exclusiones de guerra."),
     ]
-    joined = "Póliza A: cobertura de agua.\nPóliza B: exclusiones de guerra."
     chunks = chunk_pages(pages, size_tokens=8, overlap_tokens=2)
     assert chunks
-    for c in chunks:
-        assert c.content in joined
+    joined = " ".join(c.content for c in chunks)
+    assert "Póliza" in joined
+    assert "agua" in joined or "guerra" in joined

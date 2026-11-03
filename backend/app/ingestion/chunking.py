@@ -133,7 +133,9 @@ def chunk_pages(
         end = min(start + size_tokens, n)
         char_start = token_spans[start][0]
         char_end = token_spans[end - 1][1]
-        content = full_text[char_start:char_end]
+        # Keep punctuation/casing/accents from the PDF slice; collapse soft wraps
+        # from extraction so markers like "fifty thousand" stay searchable.
+        content = " ".join(full_text[char_start:char_end].split())
         chunks.append(
             TextChunk(
                 content=content,

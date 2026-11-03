@@ -30,8 +30,9 @@
 - **Tokenizer (chunk sizing):** ``tiktoken`` ``cl100k_base``. Windows slide on
   token ids; stored ``content`` is a **character slice of the original page
   text** (UTF-8 byte→char offsets via ``decode_single_token_bytes``), so
-  punctuation, casing and accents survive for citations. Chunks may span pages;
-  ``page_number`` is the page of the first character in the slice.
+  punctuation, casing and accents survive for citations. Soft line-wraps from PDF
+  extraction are collapsed to spaces after the slice so phrases stay searchable.
+  Chunks may span pages; ``page_number`` is the page of the first character.
 - **Fake embeddings tokenizer (separate):** Unicode word pieces
   (``[^\W_]+`` / ``casefold``) over that sliced text — keeps Spanish tokens like
   ``póliza`` for offline lexical similarity without forcing bag-of-words to match
