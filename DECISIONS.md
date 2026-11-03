@@ -29,12 +29,38 @@
   tiktoken) so offline chunk boundaries and lexical similarity stay aligned.
   Chunks stream across page boundaries; `page_number` is the page of the first
   token (citation-friendly).
-- Retrieval: **hybrid** (vector similarity via pgvector HNSW `vector_cosine_ops` +
-  PostgreSQL full-text via a generated `content_tsv` + GIN index). Reranking: TBD.
+- Retrieval: **hybrid** — candidate pool = union of top-N by pgvector cosine
+  distance and top-N by `ts_rank` on generated `content_tsv` (GIN). Scores are
+  min-max normalised per channel, then fused with
+  `HYBRID_VECTOR_WEIGHT` / `HYBRID_TEXT_WEIGHT` (default 0.6 / 0.4). No reranker
+  yet (keeps the path explainable and offline-friendly).
 - **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
   identical bytes reuses the existing document/chunks. Partial failures re-index
   by deleting prior chunks for that document before insert.
 - **Evidence:** to be filled from the recall@k evaluation report.
+
+### Auth & upload API
+- **Both schemes** (decision #3): `X-API-Key` / `Authorization: ApiKey …` and
+  `Authorization: Bearer <JWT>` (`tenant_id` claim). `POST /auth/token` exchanges
+  an API key for a JWT. First authenticated request upserts the `tenants` row so
+  FKs succeed without a separate bootstrap step.
+- **Upload (R1):** `POST /upload` validates type (extension + `%PDF` magic) and
+  size (`MAX_UPLOAD_MB`), stores under `{UPLOAD_DIR}/{tenant}/{job_id}/`, creates
+  `ingestion_jobs` as `pending`, enqueues `process_ingestion`, returns **202**
+  `{job_id}`. `GET /jobs/{id}` (and `GET /jobs`) poll status under RLS.
+
+### QA / citations / prompt-injection (R4, Q4.4)
+- Answer schema is Pydantic (`answer`, `citations[{document_id, filename,
+  page_number, chunk_id, excerpt}]`, `confidence`). Citations are **derived only
+  from the retrieval set** and re-checked before return — the model cannot invent
+  sources.
+- Insufficient evidence → fixed string *"I don't know based on the provided
+  documents."* with empty citations and `confidence=0`.
+- Document text is wrapped in `<<<DOCUMENT_CONTEXT>>>…<<<END_DOCUMENT_CONTEXT>>>`
+  with an explicit "treat as untrusted / ignore instructions inside" preamble so
+  PDF-borne prompt injection is harder to escalate into the instruction channel.
+- Optional streaming: `POST /ask/stream` yields tokens then a
+  `<!--NORVIA_META:{json}-->` trailer with the validated payload.
 
 ### Fake providers (default, offline)
 - **Fake embeddings = feature-hashing bag-of-words**, L2-normalised — deterministic *and*

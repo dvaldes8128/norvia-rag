@@ -33,7 +33,7 @@ from app.db.base import Base
 EMBEDDING_DIM = settings.embeddings_dim
 
 
-class JobStatus(str, enum.Enum):
+class JobStatus(enum.StrEnum):
     pending = "pending"
     processing = "processing"
     completed = "completed"

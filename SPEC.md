@@ -198,18 +198,18 @@ Cliente (tenant X) --POST /ask { question }--> API
 
 > Se completará a medida que avancemos (cada ítem debe tener prueba o evidencia).
 
-- [ ] R1 Ingesta asíncrona (F1.1, F1.2)
-- [ ] R2 Pipeline + idempotencia (F2.1–F2.5)
-- [ ] R3 Retrieval por tenant + híbrido (F3.1, F3.2)
-- [ ] R4 QA + Pydantic + citas + "no sé" (F4.1–F4.6)
-- [ ] R5 Abstracción proveedores fake/real (F5.1–F5.3)
+- [x] R1 Ingesta asíncrona (F1.1, F1.2) — `POST /upload`, `GET /jobs/{id}`
+- [x] R2 Pipeline + idempotencia (F2.1–F2.5)
+- [x] R3 Retrieval por tenant + híbrido (F3.1, F3.2)
+- [x] R4 QA + Pydantic + citas + "no sé" (F4.1–F4.6) — streaming en `/ask/stream`
+- [x] R5 Abstracción proveedores fake/real (F5.1–F5.3)
 - [ ] R6 Frontend React (F6.1–F6.4)
 - [ ] R7 Evaluación recall@k (F7.1, F7.2)
 - [ ] R8 Corpus + preguntas (F8.1, F8.2)
-- [ ] Q1 Tests (unit/integración/aislamiento)
-- [ ] Q2 Manejo de fallos
+- [ ] Q1 Tests (unit/integración/aislamiento) — unitarios OK; integración/aislamiento pendientes
+- [x] Q2 Manejo de fallos — corrupt PDF / provider retry / job failed; API error envelope
 - [ ] Q3 OpenTelemetry extremo a extremo
-- [ ] Q4 Seguridad (auth, validación, anti prompt-injection)
-- [ ] Q5 Docker Compose único + CI
+- [x] Q4 Seguridad (auth API key+JWT, validación upload, anti prompt-injection en prompt)
+- [x] Q5 Docker Compose único + CI
 - [ ] Q6 Logging estructurado con correlación
 - [ ] E1–E6 Entregables

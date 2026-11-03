@@ -62,18 +62,36 @@ frontend/   Vite + React + TypeScript SPA (upload, document status, chat with ci
 infra        docker-compose.yml, .github/workflows/ci.yml
 ```
 
+## API (authenticated)
+
+Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
+`Authorization: Bearer <jwt>` from `POST /auth/token`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/auth/token` | Exchange API key → JWT |
+| POST | `/upload` | Upload PDF → `202 {job_id}` (Celery ingest) |
+| GET | `/jobs/{job_id}` | Job status (`pending\|processing\|completed\|failed`) |
+| GET | `/jobs` | Recent jobs for the tenant |
+| POST | `/ask` | Question → answer + verifiable citations + confidence |
+| POST | `/ask/stream` | Streaming answer + meta trailer |
+| GET | `/health` | Liveness |
+
 ## Status
 
-Scaffolding in place. See `SPEC.md` §8 for the requirement → implementation checklist.
+See `SPEC.md` §8 for the requirement → implementation checklist.
 
-- [ ] Backend endpoints, ingestion pipeline, retrieval, QA
-- [ ] Provider abstraction (fake + real adapter)
+- [x] Backend endpoints (upload / jobs / ask), ingestion pipeline, hybrid retrieval, QA
+- [x] Provider abstraction (fake + real adapter)
 - [ ] Frontend (upload / status / chat)
-- [ ] Tests (unit, integration, tenant isolation)
+- [ ] Tests (integration + tenant isolation against Compose Postgres)
 - [ ] OpenTelemetry end-to-end trace
 - [ ] Evaluation + synthetic corpus
-- [ ] CI green
+- [x] CI workflow present (unit tests + lint)
 
 ## Known limitations
 
-_To be documented as the project progresses._
+- Chunk text is reconstructed from alphanumeric tokens (lowercased) — citations work
+  but lose original punctuation/casing. Planned fix: slice original page text by offsets.
+- Integration / RLS isolation tests and OpenTelemetry wiring are still pending.
+- Frontend shell exists but is not wired to these endpoints yet.
