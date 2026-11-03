@@ -37,7 +37,13 @@
 - **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
   identical bytes reuses the existing document/chunks. Partial failures re-index
   by deleting prior chunks for that document before insert.
-- **Evidence:** to be filled from the recall@k evaluation report.
+- **Evidence:** produced by `uv run python -m eval.run` (CI job `backend-integration`).
+  Document-level **recall@5** over the 10 synthetic questions must stay ≥ **0.8**
+  (enforced in CI with `--fail-under 0.8` and
+  `tests/integration/test_recall_eval.py`). The markdown report is uploaded as the
+  `eval-report` artifact and written to `backend/eval/reports/latest.md`. Hybrid
+  fusion (0.6 vector / 0.4 text) with 900/150 chunking is the baseline; tune weights
+  or chunk size only if recall regresses, and record the new numbers here.
 
 ### Auth & upload API
 - **Both schemes** (decision #3): `X-API-Key` / `Authorization: ApiKey …` and

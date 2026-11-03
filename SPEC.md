@@ -204,9 +204,9 @@ Cliente (tenant X) --POST /ask { question }--> API
 - [x] R4 QA + Pydantic + citas + "no sé" (F4.1–F4.6) — streaming en `/ask/stream`
 - [x] R5 Abstracción proveedores fake/real (F5.1–F5.3)
 - [x] R6 Frontend React (F6.1–F6.4) — upload, job polling, chat + citations
-- [ ] R7 Evaluación recall@k (F7.1, F7.2)
-- [ ] R8 Corpus + preguntas (F8.1, F8.2)
-- [ ] Q1 Tests (unit/integración/aislamiento) — unitarios OK; integración/aislamiento pendientes
+- [x] R7 Evaluación recall@k (F7.1, F7.2) — `python -m eval.run` → `eval/reports/latest.md`
+- [x] R8 Corpus + preguntas (F8.1, F8.2) — `corpus/documents` + `corpus/questions.json`
+- [x] Q1 Tests (unit/integración/aislamiento) — Compose Postgres + RLS fail-closed
 - [x] Q2 Manejo de fallos — corrupt PDF / provider retry / job failed; API error envelope
 - [ ] Q3 OpenTelemetry extremo a extremo
 - [x] Q4 Seguridad (auth API key+JWT, validación upload, anti prompt-injection en prompt)

@@ -41,17 +41,26 @@ external API keys required. Set `LLM_PROVIDER=real` / `EMBEDDINGS_PROVIDER=real`
 
 ## Tests
 
+CI is the source of truth (see `AGENTS.md`): unit tests run without Postgres; integration
+tests start Compose Postgres (`docker compose up -d db`), migrate, then exercise RLS +
+ingest/retrieve + recall@k.
+
 ```bash
-cd backend
-uv sync --all-extras --dev
-uv run pytest -q          # unit + integration (integration uses the Compose Postgres)
+# What CI runs (prefer waiting for GitHub Actions rather than local runs):
+cd backend && uv sync --all-extras --dev
+uv run pytest tests/unit -q
+# with Compose Postgres up + DATABASE_URL/ADMIN_DATABASE_URL pointing at localhost:
+uv run pytest tests/integration -q
 ```
 
 ## Evaluation
 
 ```bash
+# Requires migrated Compose Postgres (same URLs as integration tests).
 cd backend
-uv run python -m eval.run   # recall@k over the synthetic corpus → reproducible report
+uv run python -m corpus.build_pdfs
+uv run python -m eval.run --k 5 --fail-under 0.8
+# → backend/eval/reports/latest.md
 ```
 
 ## Repository layout
@@ -84,14 +93,14 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 - [x] Backend endpoints (upload / jobs / ask), ingestion pipeline, hybrid retrieval, QA
 - [x] Provider abstraction (fake + real adapter)
 - [x] Frontend (upload / status polling / chat with citations)
-- [ ] Tests (integration + tenant isolation against Compose Postgres)
+- [x] Tests (unit + integration + RLS isolation against Compose Postgres)
 - [ ] OpenTelemetry end-to-end trace
-- [ ] Evaluation + synthetic corpus
-- [x] CI workflow present (unit tests + lint)
+- [x] Evaluation + synthetic corpus (recall@k report via `python -m eval.run`)
+- [x] CI workflow (unit, integration+eval on Compose Postgres, frontend lint/build)
 
 ## Known limitations
 
 - Chunk text is reconstructed from alphanumeric tokens (lowercased) — citations work
   but lose original punctuation/casing. Planned fix: slice original page text by offsets.
-- Integration / RLS isolation tests and OpenTelemetry wiring are still pending.
+- OpenTelemetry end-to-end wiring is still pending.
 - Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).

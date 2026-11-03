@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  backend:
+  backend-unit:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,8 +23,44 @@ jobs:
         run: uv run ruff check .
       - name: Type check (mypy)
         run: uv run mypy app || true
-      - name: Tests
-        run: uv run pytest -q
+      - name: Unit tests
+        run: uv run pytest tests/unit -q
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    env:
+      # Host-side URLs: Compose publishes Postgres on localhost:5432.
+      DATABASE_URL: postgresql+psycopg://norvia_app:norvia_app@localhost:5432/norvia
+      ADMIN_DATABASE_URL: postgresql+psycopg://norvia:norvia@localhost:5432/norvia
+      APP_DB_PASSWORD: norvia_app
+      LLM_PROVIDER: fake
+      EMBEDDINGS_PROVIDER: fake
+      NORVIA_REQUIRE_DB: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start Compose Postgres (pgvector)
+        working-directory: .
+        run: docker compose up -d db --wait
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install deps
+        run: uv sync --all-extras --dev
+      - name: Integration tests (RLS + ingest/retrieve + recall@k)
+        run: uv run pytest tests/integration -q
+      - name: Eval recall@k report
+        run: uv run python -m eval.run --k 5 --fail-under 0.8
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: backend/eval/reports/latest.md
+          if-no-files-found: ignore
 
   frontend:
     runs-on: ubuntu-latest

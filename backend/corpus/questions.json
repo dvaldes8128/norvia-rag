@@ -1,0 +1,62 @@
+[
+  {
+    "id": "q1",
+    "question": "What is the flood coverage limit under the home policy section A?",
+    "expected_doc_ids": ["home_flood_policy"],
+    "expected_markers": ["fifty thousand", "flood"]
+  },
+  {
+    "id": "q2",
+    "question": "How soon must flood incidents be reported after discovery?",
+    "expected_doc_ids": ["home_flood_policy"],
+    "expected_markers": ["seventy two hours"]
+  },
+  {
+    "id": "q3",
+    "question": "What excess applies to vehicle theft indemnification?",
+    "expected_doc_ids": ["auto_theft_policy"],
+    "expected_markers": ["five percent", "theft"]
+  },
+  {
+    "id": "q4",
+    "question": "Within how many hours must vehicle theft be notified to police and Norvia?",
+    "expected_doc_ids": ["auto_theft_policy"],
+    "expected_markers": ["twenty four hours"]
+  },
+  {
+    "id": "q5",
+    "question": "What waiting period applies to elective orthopaedic surgery?",
+    "expected_doc_ids": ["health_waiting_circular"],
+    "expected_markers": ["one hundred eighty days"]
+  },
+  {
+    "id": "q6",
+    "question": "When do maternity benefits become available under the health plan?",
+    "expected_doc_ids": ["health_waiting_circular"],
+    "expected_markers": ["two hundred seventy days"]
+  },
+  {
+    "id": "q7",
+    "question": "Does public liability cover damage arising from war or hostilities?",
+    "expected_doc_ids": ["liability_war_exclusion"],
+    "expected_markers": ["excludes", "war"]
+  },
+  {
+    "id": "q8",
+    "question": "How are cyber operations by a nation state treated under the liability rider?",
+    "expected_doc_ids": ["liability_war_exclusion"],
+    "expected_markers": ["warlike", "cyber"]
+  },
+  {
+    "id": "q9",
+    "question": "How quickly does an assigned adjuster contact the insured after a complete claims notice?",
+    "expected_doc_ids": ["claims_procedure_notice"],
+    "expected_markers": ["forty eight hours"]
+  },
+  {
+    "id": "q10",
+    "question": "When may property damage settlements under ten thousand EUR skip a site visit?",
+    "expected_doc_ids": ["claims_procedure_notice"],
+    "expected_markers": ["remote assessment"]
+  }
+]
