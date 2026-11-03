@@ -4,8 +4,9 @@ Talks to any OpenAI-compatible HTTP endpoint (chat/completions + embeddings),
 configured entirely via environment variables. Wraps calls with:
 
 * a request **timeout**,
-* **retries with exponential backoff** (tenacity),
-* explicit **rate-limit handling** (HTTP 429 -> retried).
+* **retries with exponential backoff** (tenacity) for timeouts, transport errors,
+  HTTP 429, and HTTP 5xx,
+* final failures always raised as :class:`ProviderError` (API → 503 envelope).
 
 This keeps a single code path whether you point it at Gemini behind an
 OpenAI-compatible gateway, a self-hosted model, or any other vendor.
@@ -27,8 +28,8 @@ from app.config import settings
 from app.providers.base import LLMResult, ProviderError
 
 
-class _RateLimited(Exception):
-    pass
+class _Transient(Exception):
+    """Retriable upstream failure; mapped to ProviderError after retries exhaust."""
 
 
 def _retrying():
@@ -36,8 +37,37 @@ def _retrying():
         reraise=True,
         stop=stop_after_attempt(settings.provider_max_retries),
         wait=wait_exponential(multiplier=settings.provider_backoff_base_seconds, max=30),
-        retry=retry_if_exception_type((_RateLimited, httpx.TransportError)),
+        retry=retry_if_exception_type(_Transient),
     )
+
+
+def _as_provider_error(exc: BaseException) -> ProviderError:
+    if isinstance(exc, ProviderError):
+        return exc
+    return ProviderError(str(exc))
+
+
+def _post_json(url: str, *, api_key: str, payload: dict) -> httpx.Response:
+    try:
+        return httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=payload,
+            timeout=settings.provider_timeout_seconds,
+        )
+    except httpx.TimeoutException as exc:
+        raise _Transient("request timed out") from exc
+    except httpx.TransportError as exc:
+        raise _Transient(f"transport error: {exc}") from exc
+
+
+def _raise_for_status(resp: httpx.Response, *, what: str) -> None:
+    if resp.status_code == 429:
+        raise _Transient(f"{what} rate limited (HTTP 429)")
+    if resp.status_code >= 500:
+        raise _Transient(f"{what} HTTP {resp.status_code}: {resp.text[:200]}")
+    if resp.status_code >= 400:
+        raise ProviderError(f"{what} HTTP {resp.status_code}: {resp.text[:200]}")
 
 
 class RealEmbeddings:
@@ -50,23 +80,19 @@ class RealEmbeddings:
             raise ProviderError("Real embeddings provider is not fully configured")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        return self._call(texts)
+        try:
+            return self._call(texts)
+        except _Transient as exc:
+            raise _as_provider_error(exc) from exc
 
     @_retrying()
     def _call(self, texts: list[str]) -> list[list[float]]:
-        try:
-            resp = httpx.post(
-                f"{self._base}/embeddings",
-                headers={"Authorization": f"Bearer {self._key}"},
-                json={"model": self._model, "input": texts},
-                timeout=settings.provider_timeout_seconds,
-            )
-        except httpx.TimeoutException as exc:
-            raise ProviderError("Embeddings request timed out") from exc
-        if resp.status_code == 429:
-            raise _RateLimited()
-        if resp.status_code >= 400:
-            raise ProviderError(f"Embeddings HTTP {resp.status_code}: {resp.text[:200]}")
+        resp = _post_json(
+            f"{self._base}/embeddings",
+            api_key=self._key,
+            payload={"model": self._model, "input": texts},
+        )
+        _raise_for_status(resp, what="Embeddings")
         data = resp.json()["data"]
         return [item["embedding"] for item in data]
 
@@ -80,31 +106,28 @@ class RealLLM:
             raise ProviderError("Real LLM provider is not fully configured")
 
     def generate(self, prompt: str) -> LLMResult:
-        return self._call(prompt, stream=False)
+        try:
+            return self._call(prompt)
+        except _Transient as exc:
+            raise _as_provider_error(exc) from exc
 
     def stream(self, prompt: str) -> Iterator[str]:
-        # Minimal non-incremental fallback; true SSE streaming can be added later.
+        # Non-incremental fallback until a real SSE client is wired; errors still
+        # surface as ProviderError via generate().
         yield self.generate(prompt).text
 
     @_retrying()
-    def _call(self, prompt: str, *, stream: bool) -> LLMResult:
-        try:
-            resp = httpx.post(
-                f"{self._base}/chat/completions",
-                headers={"Authorization": f"Bearer {self._key}"},
-                json={
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                },
-                timeout=settings.provider_timeout_seconds,
-            )
-        except httpx.TimeoutException as exc:
-            raise ProviderError("LLM request timed out") from exc
-        if resp.status_code == 429:
-            raise _RateLimited()
-        if resp.status_code >= 400:
-            raise ProviderError(f"LLM HTTP {resp.status_code}: {resp.text[:200]}")
+    def _call(self, prompt: str) -> LLMResult:
+        resp = _post_json(
+            f"{self._base}/chat/completions",
+            api_key=self._key,
+            payload={
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+        )
+        _raise_for_status(resp, what="LLM")
         body = resp.json()
         usage = body.get("usage", {})
         return LLMResult(

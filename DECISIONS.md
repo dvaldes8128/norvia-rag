@@ -86,8 +86,11 @@
   noise. **Fake LLM** answers from the prompt's `Context:` block (highest lexical overlap
   with the question), and returns "I don't know" when there's no overlap — mirroring the
   required "no evidence → don't invent" behaviour deterministically.
-- **Real adapter**: custom OpenAI-compatible HTTP client (no LiteLLM) with timeout,
-  tenacity backoff retries and explicit 429 handling.
+- **Real adapter**: custom OpenAI-compatible HTTP client (no LiteLLM). Retries
+  timeouts, transport errors, HTTP 429 and 5xx with tenacity backoff; permanent
+  4xx fail immediately. After retries exhaust, failures are always
+  ``ProviderError`` (API → 503 envelope). ``stream()`` still falls back to one
+  ``generate()`` chunk (true SSE deferred).
 
 ### D2 — Multi-tenant isolation
 - **RLS in PostgreSQL** (decision #4). Column `tenant_id` on every tenant-owned row;
