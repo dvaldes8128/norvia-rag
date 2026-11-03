@@ -127,13 +127,14 @@ def test_strategy_b_grounds_full_pool_then_ranks_by_retrieval() -> None:
         citation_top_n=2,
         lexical_grounding=True,
     )
-    # Must not stop at parking; among grounded, retrieval score leads (not overlap).
+    # Overlap only groups; among grounded, order is pure retrieval score.
     assert len(selected) == 2
     assert parking.chunk_id not in {c.chunk_id for c in selected}
     assert [c.chunk_id for c in selected] == [
         flood_high_retrieval.chunk_id,
         flood_high_overlap.chunk_id,
     ]
+    assert [c.score for c in selected] == [0.55, 0.4]
 
     invented = payload_from_answer(
         "Extraterrestrial coverage is unlimited.",
