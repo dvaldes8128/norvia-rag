@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -12,6 +11,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.logging import get_logger
+from app.core.telemetry import get_tracer
 from app.db.models import Chunk, Document
 from app.ingestion.chunking import chunk_pages
 from app.ingestion.errors import PermanentIngestionError, TransientIngestionError
@@ -19,7 +20,8 @@ from app.ingestion.pdf import extract_pages
 from app.providers.base import EmbeddingsProvider, ProviderError
 from app.providers.factory import get_embeddings_provider
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+_tracer = get_tracer(__name__)
 
 
 @dataclass(frozen=True)
@@ -84,11 +86,9 @@ def ingest_file(
         if existing_count and existing_count > 0:
             logger.info(
                 "ingestion.idempotent_hit",
-                extra={
-                    "tenant_id": tenant_id,
-                    "document_id": str(existing.id),
-                    "chunk_count": existing_count,
-                },
+                tenant_id=tenant_id,
+                document_id=str(existing.id),
+                chunk_count=existing_count,
             )
             # Refresh filename if the same bytes were uploaded under another name.
             if existing.filename != filename:
@@ -115,7 +115,10 @@ def ingest_file(
 
     provider = embeddings or get_embeddings_provider()
     try:
-        vectors = provider.embed([c.content for c in chunks])
+        with _tracer.start_as_current_span("ingestion.embed_chunks") as span:
+            span.set_attribute("tenant_id", tenant_id)
+            span.set_attribute("embeddings.input_count", len(chunks))
+            vectors = provider.embed([c.content for c in chunks])
     except ProviderError as exc:
         raise TransientIngestionError(f"Embeddings provider failed: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
@@ -146,12 +149,10 @@ def ingest_file(
 
     logger.info(
         "ingestion.completed",
-        extra={
-            "tenant_id": tenant_id,
-            "document_id": str(document.id),
-            "page_count": page_count,
-            "chunk_count": len(chunks),
-        },
+        tenant_id=tenant_id,
+        document_id=str(document.id),
+        page_count=page_count,
+        chunk_count=len(chunks),
     )
     return IngestionResult(
         document_id=document.id,

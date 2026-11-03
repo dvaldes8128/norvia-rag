@@ -13,12 +13,14 @@ from sqlalchemy import Select, func, literal_column, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.telemetry import get_tracer
 from app.db.models import Chunk, Document
 from app.providers.base import EmbeddingsProvider
 from app.providers.factory import get_embeddings_provider
 
 # Generated column lives in Postgres only (see migration 0001_initial).
 _CONTENT_TSV = literal_column("chunks.content_tsv")
+_tracer = get_tracer(__name__)
 
 
 @dataclass(frozen=True)
@@ -98,7 +100,10 @@ def retrieve(
     pool = candidate_pool if candidate_pool is not None else max(k * 4, 20)
 
     provider = embeddings or get_embeddings_provider()
-    query_vec = provider.embed([question])[0]
+    with _tracer.start_as_current_span("retrieval.embed_query") as span:
+        span.set_attribute("embeddings.input_count", 1)
+        query_vec = provider.embed([question])[0]
+        span.set_attribute("embeddings.dim", len(query_vec))
     tsq = func.plainto_tsquery("english", question)
     base = _candidate_select(question, query_vec)
 

@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import logging
-
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from opentelemetry import trace
 
 from app.api.deps import CurrentTenant
 from app.api.schemas import AskRequest, AskResponse, CitationOut
+from app.core.logging import get_logger, redacted_text
 from app.db.session import tenant_session
 from app.providers.factory import get_llm_provider
 from app.qa.prompt import build_prompt
 from app.qa.service import AnswerPayload, answer_question, payload_from_answer
 from app.retrieval.hybrid import retrieve
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["qa"])
 
@@ -30,15 +30,22 @@ def _to_response(payload: AnswerPayload) -> AskResponse:
 
 @router.post("/ask", response_model=AskResponse)
 def ask(body: AskRequest, principal: CurrentTenant) -> AskResponse:
+    trace.get_current_span().set_attribute("tenant_id", principal.tenant_id)
+    # Redacted: never log the full user question (Q6.2) — length/hash/preview only.
+    logger.info(
+        "ask.received",
+        tenant_id=principal.tenant_id,
+        **redacted_text("question", body.question),
+    )
     with tenant_session(principal.tenant_id) as session:
-        payload = answer_question(session, question=body.question)
+        payload = answer_question(
+            session, question=body.question, tenant_id=principal.tenant_id
+        )
     logger.info(
         "ask.completed",
-        extra={
-            "tenant_id": principal.tenant_id,
-            "citation_count": len(payload.citations),
-            "confidence": payload.confidence,
-        },
+        tenant_id=principal.tenant_id,
+        citation_count=len(payload.citations),
+        confidence=payload.confidence,
     )
     return _to_response(payload)
 

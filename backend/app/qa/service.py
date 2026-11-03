@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import re
+import time
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.core.telemetry import get_tracer
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
 from app.qa.prompt import build_prompt, excerpt_for_citation
 from app.retrieval.hybrid import RetrievedChunk, retrieve
 
 _DONT_KNOW_RE = re.compile(r"i don'?t know", re.IGNORECASE)
+_tracer = get_tracer(__name__)
 
 
 class Citation(BaseModel):
@@ -99,9 +102,28 @@ def answer_question(
     question: str,
     llm: LLMProvider | None = None,
     top_k: int | None = None,
+    tenant_id: str | None = None,
 ) -> AnswerPayload:
-    chunks = retrieve(session, question=question, top_k=top_k)
+    with _tracer.start_as_current_span("qa.retrieve") as span:
+        if tenant_id is not None:
+            span.set_attribute("tenant_id", tenant_id)
+        span.set_attribute("question.len", len(question))
+        started = time.perf_counter()
+        chunks = retrieve(session, question=question, top_k=top_k)
+        span.set_attribute("retrieval.latency_ms", round((time.perf_counter() - started) * 1000, 2))
+        span.set_attribute("retrieval.chunk_count", len(chunks))
+
     prompt = build_prompt(question, chunks)
     provider = llm or get_llm_provider()
-    result = provider.generate(prompt)
+
+    with _tracer.start_as_current_span("qa.llm.generate") as span:
+        if tenant_id is not None:
+            span.set_attribute("tenant_id", tenant_id)
+        started = time.perf_counter()
+        result = provider.generate(prompt)
+        span.set_attribute("llm.latency_ms", round((time.perf_counter() - started) * 1000, 2))
+        span.set_attribute("llm.model", result.model)
+        span.set_attribute("llm.prompt_tokens", result.prompt_tokens)
+        span.set_attribute("llm.completion_tokens", result.completion_tokens)
+
     return payload_from_answer(result.text, chunks)

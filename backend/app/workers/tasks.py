@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
 from celery.exceptions import MaxRetriesExceededError
+from opentelemetry import trace
 
+from app.core.logging import bind_correlation_id, get_logger, new_correlation_id
 from app.db.models import IngestionJob, JobStatus
 from app.db.session import tenant_session
 from app.ingestion.errors import PermanentIngestionError, TransientIngestionError
 from app.ingestion.pipeline import ingest_file
 from app.workers.celery_app import celery
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Soft time limit leaves room for the worker to mark the job failed cleanly.
 _SOFT_TIME_LIMIT = 10 * 60
@@ -32,10 +33,7 @@ def _set_job_status(
     with tenant_session(tenant_id) as session:
         job = session.get(IngestionJob, UUID(job_id))
         if job is None:
-            logger.error(
-                "ingestion.job_missing",
-                extra={"tenant_id": tenant_id, "job_id": job_id},
-            )
+            logger.error("ingestion.job_missing", tenant_id=tenant_id, job_id=job_id)
             return
         job.status = status.value
         job.error = error
@@ -59,11 +57,22 @@ def process_ingestion(
     tenant_id: str,
     file_path: str,
     filename: str,
+    correlation_id: str | None = None,
 ) -> dict[str, str | int | bool]:
     """Extract → chunk → embed → upsert; drive job status through the lifecycle."""
+    # Bind the correlation id passed from the upload endpoint so worker logs match the
+    # API logs for the same operation (Q6). Fall back to a fresh id if none was passed.
+    bind_correlation_id(correlation_id or new_correlation_id())
+    # CeleryInstrumentor already opened the task span (child of the API span); enrich it.
+    span = trace.get_current_span()
+    span.set_attribute("tenant_id", tenant_id)
+    span.set_attribute("job_id", job_id)
+
     logger.info(
         "ingestion.task_start",
-        extra={"tenant_id": tenant_id, "job_id": job_id, "filename": filename},
+        tenant_id=tenant_id,
+        job_id=job_id,
+        filename=filename,
     )
     _set_job_status(tenant_id=tenant_id, job_id=job_id, status=JobStatus.processing)
 
@@ -94,7 +103,9 @@ def process_ingestion(
     except PermanentIngestionError as exc:
         logger.warning(
             "ingestion.permanent_failure",
-            extra={"tenant_id": tenant_id, "job_id": job_id, "error": str(exc)},
+            tenant_id=tenant_id,
+            job_id=job_id,
+            error=str(exc),
         )
         _set_job_status(
             tenant_id=tenant_id,
@@ -107,12 +118,10 @@ def process_ingestion(
     except TransientIngestionError as exc:
         logger.warning(
             "ingestion.transient_failure",
-            extra={
-                "tenant_id": tenant_id,
-                "job_id": job_id,
-                "error": str(exc),
-                "retries": self.request.retries,
-            },
+            tenant_id=tenant_id,
+            job_id=job_id,
+            error=str(exc),
+            retries=self.request.retries,
         )
         try:
             raise self.retry(exc=exc) from exc
@@ -132,7 +141,8 @@ def process_ingestion(
     except Exception as exc:
         logger.exception(
             "ingestion.unexpected_failure",
-            extra={"tenant_id": tenant_id, "job_id": job_id},
+            tenant_id=tenant_id,
+            job_id=job_id,
         )
         try:
             raise self.retry(exc=exc) from exc

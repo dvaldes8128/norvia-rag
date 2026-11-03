@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import logging
 import re
 import uuid
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from opentelemetry import trace
 
 from app.api.deps import CurrentTenant
 from app.api.schemas import UploadAccepted
 from app.config import settings
+from app.core.logging import get_correlation_id, get_logger
 from app.db.models import IngestionJob, JobStatus
 from app.db.session import tenant_session
 from app.workers.tasks import process_ingestion
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["ingestion"])
 
@@ -71,6 +72,7 @@ async def upload_pdf(
     principal: CurrentTenant,
 ) -> UploadAccepted:
     """Validate & store a PDF, create a pending job, enqueue ingestion."""
+    trace.get_current_span().set_attribute("tenant_id", principal.tenant_id)
     max_bytes = settings.max_upload_mb * 1024 * 1024
     filename = _safe_filename(file.filename)
     job_id = uuid.uuid4()
@@ -131,19 +133,21 @@ async def upload_pdf(
         )
         session.add(job)
 
+    trace.get_current_span().set_attribute("job_id", str(job_id))
+    # Propagate the correlation id into the worker so API + worker logs share one id (Q6).
+    correlation_id = get_correlation_id()
     process_ingestion.delay(
         str(job_id),
         principal.tenant_id,
         str(dest_path),
         filename,
+        correlation_id=correlation_id,
     )
     logger.info(
         "upload.accepted",
-        extra={
-            "tenant_id": principal.tenant_id,
-            "job_id": str(job_id),
-            "filename": filename,
-            "bytes": written,
-        },
+        tenant_id=principal.tenant_id,
+        job_id=str(job_id),
+        filename=filename,
+        bytes=written,
     )
     return UploadAccepted(job_id=job_id, status=JobStatus.pending.value, filename=filename)
