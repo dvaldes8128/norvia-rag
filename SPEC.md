@@ -173,24 +173,9 @@ Cliente (tenant X) --POST /ask { question }--> API
 
 ## 7. Preguntas abiertas / ambigüedades a confirmar
 
-> Estas requieren alineación entre nosotros antes de codear. Las acordadas pasan a `DECISIONS.md`.
-
-1. **Hosting real**: el enunciado exige **GitHub público**. Nuestro entorno usa remoto Cursor
-   por defecto → ¿confirmas que el push final irá a un repo público de **GitHub**?
-2. **Proveedor real de LLM/embeddings**: ¿**Gemini vía LiteLLM** (como sugiere el enunciado) o
-   adaptador propio? (Por defecto todo corre con el proveedor **fake determinista**.)
-3. **Auth por tenant**: ¿**API key** (más simple, suficiente) o **JWT**? Propuesta: API key.
-4. **Aislamiento (D2)**: propuesta inicial **RLS en PostgreSQL** por robustez; alternativa
-   filtro por columna por simplicidad. ¿Preferencia?
-5. **Chunking (D1)**: propuesta de arranque ~**800–1000 tokens con 15–20% overlap**, ajustable
-   según recall@k. ¿Ok partir de ahí?
-6. **Gestor de dependencias Python**: ¿**uv**, Poetry o pip-tools? Propuesta: **uv**.
-7. **Frontend**: ¿**Vite + React + TypeScript**? Estilado mínimo (CSS plano / Tailwind).
-8. **Integración (Q1.2)**: ¿**testcontainers** o reutilizar el Docker Compose? Propuesta:
-   testcontainers en CI.
-9. **Alcance a recortar (D4)**: con 72h, ¿qué consideramos *nice-to-have* explícitamente
-   fuera? (p.ej. reranking avanzado, auth robusta, métricas de coste en vivo).
-10. **Idioma de código/docs**: ¿README y DECISIONS en español, código/comentarios en inglés?
+> Resueltas → ver tabla y §§ D1–D4 en `DECISIONS.md` (hosting GitHub público, adaptador
+> propio, API key+JWT, RLS, chunking 900/150 + híbrido, uv, Vite+TS, Compose para
+> integración, cortes D4, docs/código en inglés).
 
 ---
 
@@ -214,4 +199,5 @@ Cliente (tenant X) --POST /ask { question }--> API
 - [x] Q5 Docker Compose único + CI
 - [x] Q6 Logging estructurado con correlación — structlog + `X-Request-ID` propagado a
       Celery; redacción de contenido/pregunta (len/hash/preview), nunca texto completo
-- [x] E1–E6 Entregables — E6: traza OTel completa documentada en README (captura consola)
+- [x] D1–D4 justificados en `DECISIONS.md` (D3 policy decided; confirm/soft-delete **code gap**)
+- [x] E1–E6 Entregables — E6: traza OTel; E3 incluye sección «How we use generative AI»

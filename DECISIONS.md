@@ -16,8 +16,10 @@
 | 6 | Python deps | **uv** | Fast, lockfile, reproducible. |
 | 7 | Frontend | **Vite + React + TypeScript** | Lightweight SPA; TS as recommended by brief. |
 | 8 | Integration tests (Q1.2) | **Docker Compose** (real PG + pgvector) | Reuse the same compose stack for integration tests rather than testcontainers. |
-| 9 | Scope cuts (D4) | **None planned for now** | Per explicit instruction: don't plan cuts yet; revisit near the deadline and document anything dropped here. |
+| 9 | Scope cuts (D4) | **Deferred list locked** | See §D4: no advanced reranker, live cost dashboard, explicit DLQ, version/history UI, soft-delete undelete UI, LiteLLM router, or blocking mypy in CI. |
 | 10 | Language | **All English** (code, docs, comments) | Uniform language across repo. |
+| 11 | Doc versioning (D3) | **Replace by filename after confirm** | Same tenant + filename + new hash → ask user; on confirm bump `version`, soft-delete old chunks, re-index. Same hash → idempotent hit. |
+| 12 | Doc deletion (D3) | **Soft-delete API** | `deleted_at` on document (and chunks); retrieval filters inactive rows. No undelete UI in this delivery. |
 
 ## Open questions still asked (D1–D4 from the brief)
 
@@ -36,7 +38,9 @@
   yet (keeps the path explainable and offline-friendly).
 - **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
   identical bytes reuses the existing document/chunks. Partial failures re-index
-  by deleting prior chunks for that document before insert.
+  by clearing prior chunks for that document before insert. Same filename with
+  **different** bytes is versioning (D3), not idempotency — confirm with the
+  operator, then soft-delete old chunks and re-index.
 - **Evidence** (CI run on `570be3f`, report in `backend/eval/reports/latest.md`):
   | Metric | Value |
   |---|---|
@@ -92,13 +96,75 @@
   + per-transaction tenant binding — accepted.
 
 ### D3 — Document versioning / deletion
-- **Not yet decided** (was not in the decision card). Proposal to confirm: on re-upload of a
-  changed document, **re-index** the new version and **invalidate old chunks/citations**
-  (soft-delete), so citations always point to live fragments. Costs/behavior to be detailed.
+**Decided** (decision card `art-3768761f`, 2026-11-03).
+
+#### Behaviour
+- **Same bytes** (`sha256` match under the tenant): keep today’s idempotent hit —
+  reuse the existing document/chunks; refresh filename if needed. No re-embed.
+- **Same filename, different bytes** (logical “new version” of an existing live
+  document): **do not replace silently**. The API/UI must ask the operator whether
+  this upload is a new version of the existing file. On confirm:
+  1. bump `documents.version`;
+  2. **soft-delete** prior chunks (`deleted_at` / inactive flag) so retrieval and
+     citation validation ignore them;
+  3. re-extract → chunk → embed → insert the new active chunk set.
+  On decline: treat as a **separate** document (new `document_id`), leaving the
+  previous file’s chunks active (operator choice when the name collision is
+  coincidental).
+- **Explicit delete**: `DELETE /documents/{id}` (or equivalent) sets soft-delete on
+  the document and its chunks. Retrieval filters `deleted_at IS NULL`. Cascade
+  hard-delete is **not** used so audit/undelete remain possible later; undelete
+  UI is out of scope for this delivery (see D4).
+- **Citations:** answers and citation checks only consider **active** chunks.
+  Stale `chunk_id`s from before a version bump no longer resolve → citations
+  always point at live fragments.
+
+#### Cost of re-indexing (why we accept it)
+| Factor | Estimate / note |
+|--------|-----------------|
+| Embeddings | One full re-embed of the new PDF (~pages × chunks). Fake provider: CPU only. Real provider: billed tokens ≈ Σ chunk tokens. |
+| Storage | Soft-deleted chunks remain until a later GC; index size grows with churn. Acceptable for the eval corpus and demos; GC/compaction deferred. |
+| Latency | One Celery job; same path as first ingest. Operator confirmation avoids accidental double cost. |
+| Retrieval | Inactive chunks excluded from hybrid query → no score dilution from old versions. |
+| Idempotent re-upload | Zero embed cost when hash matches. |
+
+No full version history table and no pin-citation-to-version: only the latest
+confirmed version is active. Field `version` is the audit counter, not a
+queryable archive.
+
+#### Gap vs current code (to implement or declare)
+Today the pipeline keys only on `(tenant_id, content_hash)` and never links
+same-filename uploads; `version` stays at 1; there is no `deleted_at` and no
+delete endpoint. Closing D3 in the deliverable means either implementing the
+confirm + soft-delete path above or stating clearly in README that the policy is
+decided and the confirm/soft-delete path is the next increment — prefer
+implementing the minimal path before the single delivery push if time allows.
 
 ### D4 — Production quality & cost metrics
-- No scope cut planned for now (decision #9). Production answer-quality and per-query cost
-  measurement approach to be written; anything deferred near the deadline gets logged here.
+**Decided** (same decision card).
+
+#### Answer quality in production
+- **Proxy = offline eval + CI gate**, not a live feedback loop.
+- Corpus + questions under `corpus/` / `eval/`; CI enforces `recall@5 ≥ 0.8`
+  (`--fail-under 0.8` + integration test). Report: `backend/eval/reports/latest.md`.
+- Production “quality check” for this delivery = re-run that suite + inspect an
+  OTel ask trace (E6). No thumbs-up/down or human-label pipeline.
+
+#### Cost per query
+- Use existing OTel span attributes `llm.prompt_tokens` /
+  `llm.completion_tokens` (and stage latencies).
+- Dollar cost = tokens × provider tariff, computed **offline** or in a collector —
+  **no in-app cost dashboard**.
+- Fake provider → $0; real adapter surfaces token counts for the same formula.
+
+#### Explicitly out of scope (time box)
+- Advanced reranker / cross-encoder
+- Live cost dashboard
+- Explicit DLQ beyond a clear terminal `ingestion_jobs.status = failed`
+- Document version-history UI
+- Soft-delete undelete / trash UI in the frontend
+- LiteLLM / multi-provider router
+- Blocking `mypy` in CI (remains non-gating / `|| true`)
 
 ## Observability (Q3 / Q6 / E6)
 
@@ -157,10 +223,41 @@
   `docker compose up` + an upload + an ask.
 
 ## How we use generative AI (and how we verify)
-- _To be completed throughout the project_: which parts were AI-assisted, and the checks
-  applied (tests passing, manual code review, running the eval, inspecting traces).
-- Observability (Q3/Q6/E6) was implemented with AI assistance and verified by: `ruff`
-  clean, DB-free unit tests asserting `setup_telemetry` idempotency and that logs carry
-  `correlation_id` while omitting full content, an in-process capture confirming all
-  spans share one `trace_id` with correct parent/child links, and CI (unit + integration)
-  green on `main`.
+
+The brief allows generative AI freely. We used Cursor agents (Composer / Claude-family
+models via the IDE) as a pair programmer for scaffolding, implementation, tests, and
+docs. Humans set the stack constraints (RLS + restricted DB role, hybrid retrieval,
+fake-by-default providers, CI-only verification) and reviewed every change before it
+landed on `main`.
+
+### Where AI helped
+| Area | What AI drafted / accelerated | What we kept / changed |
+|------|-------------------------------|------------------------|
+| Scaffold | Monorepo layout, Compose, CI skeleton, `SPEC.md` / early `DECISIONS.md` | Public GitHub target, uv, Vite+TS, Compose (not testcontainers) locked by us |
+| Data + auth | SQLAlchemy models, Alembic, RLS policies, API-key + JWT helpers | `norvia_app` NOSUPERUSER/NOBYPASSRLS + fail-closed GUC — reviewed carefully |
+| Ingestion | PDF extract, overlapping chunker, Celery task lifecycle | Permanent vs transient errors; hash idempotency; no silent filename replace (D3) |
+| Retrieval + QA | Hybrid fuse SQL, Pydantic answer schema, citation re-check, prompt wrappers | Fake embeddings = lexical hashing so `recall@k` is meaningful; “I don’t know” path |
+| Providers | Fake LLM/embeddings + real OpenAI-compatible client (timeouts, tenacity, 429) | No LiteLLM (D4); we own retry/rate-limit behaviour |
+| Frontend | Upload, job polling, chat + citation UI | Kept intentionally small; no version-confirm UI yet (D3 gap) |
+| Eval + tests | Synthetic corpus, `eval.run`, unit + integration + RLS isolation | CI gate `recall@5 ≥ 0.8`; report committed under `eval/reports/` |
+| Observability | OTel bootstrap, Celery context propagation, structlog + redaction | SQLAlchemy `<2.1` pin so DB spans appear; console exporter default |
+| Docs | README trace evidence (E6), D3/D4 write-up from decision card | Decisions are ours; AI only phrased the agreed policy |
+
+### How we verify (do not trust the model alone)
+1. **CI is the gate** (`AGENTS.md`): push → GitHub Actions runs ruff, unit tests,
+   Compose Postgres integration (RLS + ingest/retrieve + recall@k), frontend lint/build.
+   No local test suite as the source of truth.
+2. **Eval evidence:** `backend/eval/reports/latest.md` (recall@5 = 1.000 on the synthetic
+   set at commit `570be3f` / follow-ups); CI fails under 0.8.
+3. **Manual / in-process checks:** unit tests for chunking, citation validation, telemetry
+   idempotency, log correlation/redaction; captured console span tree for E6 in README.
+4. **Code review:** every AI patch is read for security (tenant binding, upload magic
+   bytes, prompt-injection wrappers) and for doc↔code drift (D3 soft-delete still a
+   declared gap — see below and README).
+5. **Interview bar:** we only ship behaviour we can walk through on screen (C4).
+
+### Explicit honesty
+AI did **not** invent the multi-tenant threat model or the D3/D4 trade-offs; those came
+from the brief + our decision card. AI *did* write most of the boilerplate and first
+passes of modules; regressions (e.g. logging under pytest capture, mypy soft-fail,
+chunk punctuation loss) were caught by CI or review and fixed or documented.
