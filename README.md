@@ -83,7 +83,7 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 
 - [x] Backend endpoints (upload / jobs / ask), ingestion pipeline, hybrid retrieval, QA
 - [x] Provider abstraction (fake + real adapter)
-- [ ] Frontend (upload / status / chat)
+- [x] Frontend (upload / status polling / chat with citations)
 - [ ] Tests (integration + tenant isolation against Compose Postgres)
 - [ ] OpenTelemetry end-to-end trace
 - [ ] Evaluation + synthetic corpus
@@ -94,4 +94,4 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 - Chunk text is reconstructed from alphanumeric tokens (lowercased) — citations work
   but lose original punctuation/casing. Planned fix: slice original page text by offsets.
 - Integration / RLS isolation tests and OpenTelemetry wiring are still pending.
-- Frontend shell exists but is not wired to these endpoints yet.
+- Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).

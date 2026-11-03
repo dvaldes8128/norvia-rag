@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { clearAuth, type AuthState } from "../api/client";
 import { exchangeToken } from "../api/endpoints";
 

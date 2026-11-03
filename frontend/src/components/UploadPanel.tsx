@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { uploadPdf } from "../api/endpoints";
 import type { JobStatusResponse } from "../types/api";
 import { rememberJobFilename } from "../hooks/useJobPolling";

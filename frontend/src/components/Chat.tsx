@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { askQuestion } from "../api/endpoints";
 import type { AskResponse, Citation } from "../types/api";
 

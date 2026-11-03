@@ -203,7 +203,7 @@ Cliente (tenant X) --POST /ask { question }--> API
 - [x] R3 Retrieval por tenant + híbrido (F3.1, F3.2)
 - [x] R4 QA + Pydantic + citas + "no sé" (F4.1–F4.6) — streaming en `/ask/stream`
 - [x] R5 Abstracción proveedores fake/real (F5.1–F5.3)
-- [ ] R6 Frontend React (F6.1–F6.4)
+- [x] R6 Frontend React (F6.1–F6.4) — upload, job polling, chat + citations
 - [ ] R7 Evaluación recall@k (F7.1, F7.2)
 - [ ] R8 Corpus + preguntas (F8.1, F8.2)
 - [ ] Q1 Tests (unit/integración/aislamiento) — unitarios OK; integración/aislamiento pendientes

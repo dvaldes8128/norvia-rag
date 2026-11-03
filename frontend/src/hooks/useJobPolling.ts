@@ -74,14 +74,10 @@ export function useJobPolling(enabled: boolean) {
     };
   }, [enabled, refresh]);
 
+  const hasActive = jobs.some((j) => ACTIVE.has(j.status));
+
   useEffect(() => {
-    if (!enabled) return;
-    const hasActive = jobs.some((j) => ACTIVE.has(j.status));
-    if (timer.current !== null) {
-      window.clearInterval(timer.current);
-      timer.current = null;
-    }
-    if (!hasActive) return;
+    if (!enabled || !hasActive) return;
     timer.current = window.setInterval(() => {
       void refresh();
     }, POLL_MS);
@@ -91,7 +87,7 @@ export function useJobPolling(enabled: boolean) {
         timer.current = null;
       }
     };
-  }, [enabled, jobs, refresh]);
+  }, [enabled, hasActive, refresh]);
 
   const upsertLocal = useCallback((job: JobStatusResponse) => {
     if (job.filename) rememberJobFilename(job.job_id, job.filename);
