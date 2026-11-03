@@ -104,35 +104,40 @@ def test_strategy_a_cites_top_n_by_score() -> None:
     assert payload.citations[0].chunk_id == high.chunk_id
 
 
-def test_strategy_b_grounds_full_pool_then_top_n() -> None:
+def test_strategy_b_grounds_full_pool_then_ranks_by_retrieval() -> None:
     # High retrieval score but no lexical overlap with the flood answer.
     parking = _chunk(
         content="Office parking permits renew every January.",
         score=0.99,
     )
-    flood_low = _chunk(
+    # Near-copy of the answer → very high overlap, but weaker retrieval score.
+    flood_high_overlap = _chunk(
         content="Flood damage is covered up to fifty thousand EUR under section A.",
         score=0.4,
     )
-    flood_mid = _chunk(
+    # Partial overlap, stronger retrieval — must rank above the near-copy.
+    flood_high_retrieval = _chunk(
         content="Section A flood limit is fifty thousand EUR for sudden surface runoff.",
         score=0.55,
     )
     answer = "Flood damage is covered up to fifty thousand EUR under section A."
     selected = select_citation_chunks(
-        [parking, flood_low, flood_mid],
+        [parking, flood_high_overlap, flood_high_retrieval],
         answer,
         citation_top_n=2,
         lexical_grounding=True,
     )
-    # Must not stop at parking (top score) and return <N; pull grounded from full set.
+    # Must not stop at parking; among grounded, retrieval score leads (not overlap).
     assert len(selected) == 2
     assert parking.chunk_id not in {c.chunk_id for c in selected}
-    assert {c.chunk_id for c in selected} == {flood_low.chunk_id, flood_mid.chunk_id}
+    assert [c.chunk_id for c in selected] == [
+        flood_high_retrieval.chunk_id,
+        flood_high_overlap.chunk_id,
+    ]
 
     invented = payload_from_answer(
         "Extraterrestrial coverage is unlimited.",
-        [parking, flood_low, flood_mid],
+        [parking, flood_high_overlap, flood_high_retrieval],
         citation_top_n=2,
         lexical_grounding=True,
     )

@@ -112,9 +112,9 @@ def select_citation_chunks(
 
     * **A** (``lexical_grounding=False``): top-N by retrieval score.
     * **B** (``lexical_grounding=True``): ground against the **full** retrieval
-      set first, then take top-N by ``(overlap_ratio, retrieval_score)``.
-      Truncating before filtering would shrink below N whenever a high-score
-      hit fails the overlap check. Empty → caller should emit don't-know.
+      set (overlap is a **gate**, not the primary rank key), then take top-N by
+      ``(retrieval_score, overlap_ratio)``. Ranking by overlap first would promote
+      high-overlap / low-relevance hits. Empty → caller should emit don't-know.
     """
     if not chunks:
         return []
@@ -128,7 +128,7 @@ def select_citation_chunks(
         if count >= settings.citation_min_overlap_tokens or (
             ratio >= settings.citation_min_overlap_ratio
         ):
-            grounded.append((ratio, chunk.score, chunk))
+            grounded.append((chunk.score, ratio, chunk))
     grounded.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return [chunk for _, _, chunk in grounded[:n]]
 
