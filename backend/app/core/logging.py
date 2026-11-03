@@ -26,18 +26,34 @@ _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=N
 _configured = False
 
 
+class _DynamicStreamLogger:
+    """Minimal structlog logger that resolves ``sys.stdout`` at *write* time.
+
+    Resolving late (instead of capturing a stream object at configuration time) keeps
+    logging robust under pytest's stdout capture, where the stream swapped in during
+    collection is closed before tests run.
+    """
+
+    def msg(self, message: str) -> None:
+        print(message, file=sys.stdout, flush=True)
+
+    log = debug = info = warning = warn = error = err = msg
+    fatal = critical = exception = msg
+
+
+def _logger_factory(*_args: object) -> _DynamicStreamLogger:
+    return _DynamicStreamLogger()
+
+
 def setup_logging(level: str | None = None) -> None:
     """Configure structlog + stdlib logging to emit JSON lines. Idempotent."""
     global _configured
 
     log_level = getattr(logging, (level or "INFO").upper(), logging.INFO)
 
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=log_level,
-        force=True,
-    )
+    # Level only; structlog owns formatting/output. We deliberately don't pin a stream
+    # object here to avoid holding a reference that pytest may later close.
+    logging.basicConfig(format="%(message)s", level=log_level, force=True)
 
     structlog.configure(
         processors=[
@@ -49,7 +65,7 @@ def setup_logging(level: str | None = None) -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        logger_factory=structlog.PrintLoggerFactory(sys.stdout),
+        logger_factory=_logger_factory,
         cache_logger_on_first_use=False,
     )
     _configured = True
