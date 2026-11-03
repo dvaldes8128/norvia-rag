@@ -79,10 +79,11 @@ Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/auth/token` | Exchange API key → JWT |
-| POST | `/upload` | Upload PDF → `202 {job_id}` (Celery ingest) |
+| POST | `/upload` | Upload PDF → `202 {job_id}` (Celery ingest). Same filename + new bytes → **409** `filename_conflict` until `?confirm=replace\|as_new` (+ `replace_document_id` for replace) |
+| DELETE | `/documents/{id}` | Soft-delete document + live chunks (`deleted_at`; retrieval ignores them) |
 | GET | `/jobs/{job_id}` | Job status (`pending\|processing\|completed\|failed`) |
 | GET | `/jobs` | Recent jobs for the tenant |
-| POST | `/ask` | Question → answer + verifiable citations + confidence |
+| POST | `/ask` | Question → answer + verifiable citations + confidence. LLM outage → **503** `{error,code,detail}` (`provider_error`) |
 | POST | `/ask/stream` | Streaming answer + meta trailer |
 | GET | `/health` | Liveness |
 

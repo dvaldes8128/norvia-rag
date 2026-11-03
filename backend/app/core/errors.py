@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.providers.base import ProviderError
+
 
 class ErrorBody(BaseModel):
     error: str
@@ -60,4 +62,16 @@ def register_exception_handlers(app: FastAPI) -> None:
             error="Validation failed",
             code="validation_error",
             detail=exc.errors(),
+        )
+
+    @app.exception_handler(ProviderError)
+    async def provider_exception_handler(
+        _request: Request, exc: ProviderError
+    ) -> JSONResponse:
+        # Q2.2 / Q2.4: LLM/embeddings outage → stable envelope (not a bare 500).
+        return _envelope(
+            503,
+            error="Upstream AI provider failed",
+            code="provider_error",
+            detail=str(exc),
         )

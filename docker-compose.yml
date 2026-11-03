@@ -38,7 +38,22 @@ services:
       - "8000:8000"
     volumes:
       - uploads:/data/uploads
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Migrate before serve so `docker compose up` works from a fresh volume (E2/Q5).
+    command: >
+      sh -c "alembic upgrade head
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
 
   worker:
     build:
@@ -49,6 +64,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
     volumes:
       - uploads:/data/uploads
     command: celery -A app.workers.celery_app.celery worker --loglevel=INFO
@@ -57,7 +74,11 @@ services:
     build:
       context: ./frontend
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    environment:
+      # Vite proxy must reach the Compose service name, not the browser's localhost.
+      VITE_API_PROXY_TARGET: http://api:8000
     ports:
       - "5173:5173"
 
