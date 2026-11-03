@@ -74,9 +74,11 @@
   sources.
 - **Citation selection (per-request on ``POST /ask``):**
   - **A** — ``citation_top_n`` (default 3): cite that many top fused-score chunks.
-  - **B** — ``lexical_grounding: true``: keep only chunks with lexical overlap vs
-    the answer (thresholds ``CITATION_MIN_OVERLAP_*``). If none remain → don't-know.
-    Default ``false`` so the fake LLM path stays predictable.
+  - **B** — ``lexical_grounding: true``: filter the **full** retrieval set by
+    lexical overlap (``CITATION_MIN_OVERLAP_*``), then take top-N by
+    ``(overlap_ratio, retrieval_score)``. Ground-then-cut (not cut-then-ground)
+    so a high-score miss does not starve the citation budget. None grounded →
+    don't-know. Default ``false`` so the fake LLM path stays predictable.
 - Insufficient evidence → fixed string *"I don't know based on the provided
   documents."* with empty citations and `confidence=0`.
 - Document text is wrapped in `<<<DOCUMENT_CONTEXT>>>…<<<END_DOCUMENT_CONTEXT>>>`

@@ -108,18 +108,29 @@ def select_citation_chunks(
     citation_top_n: int = 3,
     lexical_grounding: bool = False,
 ) -> list[RetrievedChunk]:
-    """Pick citation sources: A = top-N by score; B = also require lexical overlap.
+    """Pick up to ``citation_top_n`` citation sources.
 
-    When ``lexical_grounding`` is True and no chunk overlaps the answer enough,
-    returns an empty list (caller should emit don't-know).
+    * **A** (``lexical_grounding=False``): top-N by retrieval score.
+    * **B** (``lexical_grounding=True``): ground against the **full** retrieval
+      set first, then take top-N by ``(overlap_ratio, retrieval_score)``.
+      Truncating before filtering would shrink below N whenever a high-score
+      hit fails the overlap check. Empty → caller should emit don't-know.
     """
     if not chunks:
         return []
-    ranked = sorted(chunks, key=lambda c: c.score, reverse=True)
-    candidates = ranked[: max(1, citation_top_n)]
+    n = max(1, citation_top_n)
     if not lexical_grounding:
-        return candidates
-    return [c for c in candidates if chunk_supports_answer(answer, c)]
+        return sorted(chunks, key=lambda c: c.score, reverse=True)[:n]
+
+    grounded: list[tuple[float, float, RetrievedChunk]] = []
+    for chunk in chunks:
+        count, ratio = lexical_overlap(answer, chunk.content)
+        if count >= settings.citation_min_overlap_tokens or (
+            ratio >= settings.citation_min_overlap_ratio
+        ):
+            grounded.append((ratio, chunk.score, chunk))
+    grounded.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return [chunk for _, _, chunk in grounded[:n]]
 
 
 def confidence_for(chunks: list[RetrievedChunk], answer: str) -> float:

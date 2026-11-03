@@ -104,26 +104,35 @@ def test_strategy_a_cites_top_n_by_score() -> None:
     assert payload.citations[0].chunk_id == high.chunk_id
 
 
-def test_strategy_b_drops_ungrounded_and_may_dont_know() -> None:
-    flood = _chunk(
-        content="Flood damage is covered up to fifty thousand EUR under section A.",
-        score=0.9,
-    )
+def test_strategy_b_grounds_full_pool_then_top_n() -> None:
+    # High retrieval score but no lexical overlap with the flood answer.
     parking = _chunk(
         content="Office parking permits renew every January.",
-        score=0.85,
+        score=0.99,
     )
+    flood_low = _chunk(
+        content="Flood damage is covered up to fifty thousand EUR under section A.",
+        score=0.4,
+    )
+    flood_mid = _chunk(
+        content="Section A flood limit is fifty thousand EUR for sudden surface runoff.",
+        score=0.55,
+    )
+    answer = "Flood damage is covered up to fifty thousand EUR under section A."
     selected = select_citation_chunks(
-        [flood, parking],
-        "Flood damage is covered up to fifty thousand EUR under section A.",
+        [parking, flood_low, flood_mid],
+        answer,
         citation_top_n=2,
         lexical_grounding=True,
     )
-    assert [c.chunk_id for c in selected] == [flood.chunk_id]
+    # Must not stop at parking (top score) and return <N; pull grounded from full set.
+    assert len(selected) == 2
+    assert parking.chunk_id not in {c.chunk_id for c in selected}
+    assert {c.chunk_id for c in selected} == {flood_low.chunk_id, flood_mid.chunk_id}
 
     invented = payload_from_answer(
         "Extraterrestrial coverage is unlimited.",
-        [flood, parking],
+        [parking, flood_low, flood_mid],
         citation_top_n=2,
         lexical_grounding=True,
     )
