@@ -53,7 +53,8 @@ class Settings(BaseSettings):
     hybrid_vector_weight: float = 0.6
     hybrid_text_weight: float = 0.4
 
-    # Uploads
+    # Uploads (shared volume between API and Celery worker)
+    upload_dir: str = "/data/uploads"
     max_upload_mb: int = 25
 
     # OpenTelemetry

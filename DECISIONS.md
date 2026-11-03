@@ -22,9 +22,18 @@
 ## Open questions still asked (D1–D4 from the brief)
 
 ### D1 — Chunking & retrieval strategy
-- Chunk size/overlap: starting at 800–1000 tokens / 15–20% overlap (decision #5).
+- Chunk size/overlap: starting at **900 tokens / 150 overlap** (~17%), within the
+  agreed 800–1000 / 15–20% band (decision #5). Tunable via `CHUNK_SIZE_TOKENS` /
+  `CHUNK_OVERLAP_TOKENS`.
+- **Tokenizer:** same alphanumeric regex as the fake embeddings provider (not
+  tiktoken) so offline chunk boundaries and lexical similarity stay aligned.
+  Chunks stream across page boundaries; `page_number` is the page of the first
+  token (citation-friendly).
 - Retrieval: **hybrid** (vector similarity via pgvector HNSW `vector_cosine_ops` +
   PostgreSQL full-text via a generated `content_tsv` + GIN index). Reranking: TBD.
+- **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
+  identical bytes reuses the existing document/chunks. Partial failures re-index
+  by deleting prior chunks for that document before insert.
 - **Evidence:** to be filled from the recall@k evaluation report.
 
 ### Fake providers (default, offline)
