@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# uv
+uv.lock.local
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Data / local artifacts
+*.log
+data/
+uploads/
+*.sqlite3
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
