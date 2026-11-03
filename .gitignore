@@ -18,6 +18,7 @@ uv.lock.local
 node_modules/
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
 
 # Data / local artifacts
 *.log
