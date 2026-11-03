@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.telemetry import get_tracer
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
@@ -16,6 +17,32 @@ from app.qa.prompt import build_prompt, excerpt_for_citation
 from app.retrieval.hybrid import RetrievedChunk, retrieve
 
 _DONT_KNOW_RE = re.compile(r"i don'?t know", re.IGNORECASE)
+_WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "to",
+        "with",
+    }
+)
+_DONT_KNOW_ANSWER = "I don't know based on the provided documents."
 _tracer = get_tracer(__name__)
 
 
@@ -44,19 +71,76 @@ def is_dont_know(text: str) -> bool:
     return bool(_DONT_KNOW_RE.search(text))
 
 
+def _content_words(text: str) -> set[str]:
+    return {
+        m.group(0).casefold()
+        for m in _WORD_RE.finditer(text)
+        if m.group(0).casefold() not in _STOPWORDS
+    }
+
+
+def lexical_overlap(answer: str, chunk_content: str) -> tuple[int, float]:
+    """Return (overlap_token_count, overlap / |answer_words|) for grounding checks."""
+    answer_words = _content_words(answer)
+    if not answer_words:
+        return 0, 0.0
+    overlap = answer_words & _content_words(chunk_content)
+    return len(overlap), len(overlap) / len(answer_words)
+
+
+def chunk_supports_answer(
+    answer: str,
+    chunk: RetrievedChunk,
+    *,
+    min_tokens: int | None = None,
+    min_ratio: float | None = None,
+) -> bool:
+    min_tokens = settings.citation_min_overlap_tokens if min_tokens is None else min_tokens
+    min_ratio = settings.citation_min_overlap_ratio if min_ratio is None else min_ratio
+    count, ratio = lexical_overlap(answer, chunk.content)
+    return count >= min_tokens or ratio >= min_ratio
+
+
+def select_citation_chunks(
+    chunks: list[RetrievedChunk],
+    answer: str,
+    *,
+    top_n: int | None = None,
+    lexical_grounding: bool | None = None,
+) -> list[RetrievedChunk]:
+    """Pick citation sources: A = top-N by score; optional B = lexical filter.
+
+    When ``lexical_grounding`` is on and no chunk overlaps the answer enough,
+    returns an empty list (caller should emit don't-know).
+    """
+    if not chunks:
+        return []
+    n = settings.citation_top_n if top_n is None else top_n
+    use_lexical = (
+        settings.citation_lexical_grounding
+        if lexical_grounding is None
+        else lexical_grounding
+    )
+    ranked = sorted(chunks, key=lambda c: c.score, reverse=True)
+    candidates = ranked[: max(1, n)] if n > 0 else ranked
+    if not use_lexical:
+        return candidates
+    grounded = [c for c in candidates if chunk_supports_answer(answer, c)]
+    return grounded
+
+
 def confidence_for(chunks: list[RetrievedChunk], answer: str) -> float:
     if not chunks or is_dont_know(answer):
         return 0.0
-    # Top fused score is already in [0, 1] after normalisation within the candidate set.
+    # Top fused score among *cited* chunks (already in [0, 1] after channel norms).
     top = max(c.score for c in chunks)
-    # Slightly discount when only one weak fragment backs the answer.
     if len(chunks) == 1:
         return round(min(1.0, top * 0.9), 3)
     return round(min(1.0, top), 3)
 
 
 def citations_from_chunks(chunks: list[RetrievedChunk]) -> list[Citation]:
-    """Build verifiable citations strictly from retrieved fragments (F4.3, F4.6)."""
+    """Build verifiable citations strictly from selected fragments (F4.3, F4.6)."""
     return [
         Citation(
             document_id=c.document_id,
@@ -78,20 +162,45 @@ def validate_citations(
     return [c for c in citations if c.chunk_id in allowed]
 
 
-def payload_from_answer(answer_text: str, chunks: list[RetrievedChunk]) -> AnswerPayload:
+def payload_from_answer(
+    answer_text: str,
+    chunks: list[RetrievedChunk],
+    *,
+    top_n: int | None = None,
+    lexical_grounding: bool | None = None,
+) -> AnswerPayload:
     """Assemble a validated answer payload from free-text + retrieved chunks."""
     text = answer_text.strip()
     if not chunks or is_dont_know(text):
         return AnswerPayload(
-            answer="I don't know based on the provided documents.",
+            answer=_DONT_KNOW_ANSWER,
             citations=[],
             confidence=0.0,
         )
-    citations = validate_citations(citations_from_chunks(chunks), chunks)
+
+    selected = select_citation_chunks(
+        chunks,
+        text,
+        top_n=top_n,
+        lexical_grounding=lexical_grounding,
+    )
+    use_lexical = (
+        settings.citation_lexical_grounding
+        if lexical_grounding is None
+        else lexical_grounding
+    )
+    if use_lexical and not selected:
+        return AnswerPayload(
+            answer=_DONT_KNOW_ANSWER,
+            citations=[],
+            confidence=0.0,
+        )
+
+    citations = validate_citations(citations_from_chunks(selected), chunks)
     payload = AnswerPayload(
         answer=text,
         citations=citations,
-        confidence=confidence_for(chunks, text),
+        confidence=confidence_for(selected, text),
     )
     return AnswerPayload.model_validate(payload.model_dump())
 

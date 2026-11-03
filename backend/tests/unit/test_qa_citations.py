@@ -10,6 +10,7 @@ from app.qa.service import (
     citations_from_chunks,
     is_dont_know,
     payload_from_answer,
+    select_citation_chunks,
     validate_citations,
 )
 from app.retrieval.hybrid import RetrievedChunk
@@ -76,3 +77,56 @@ def test_prompt_isolates_document_context() -> None:
     assert "<<<END_DOCUMENT_CONTEXT>>>" in prompt
     assert "untrusted" in prompt.lower()
     assert "Question: What is covered?" in prompt
+
+
+def test_strategy_a_cites_top_n_by_score() -> None:
+    low = _chunk(content="Parking circular about office hours.", score=0.2)
+    high = _chunk(
+        content="Flood damage is covered up to fifty thousand EUR.",
+        score=0.95,
+    )
+    mid = _chunk(content="Theft requires a police report within 48 hours.", score=0.5)
+    selected = select_citation_chunks(
+        [low, high, mid],
+        "Flood damage is covered up to fifty thousand EUR.",
+        top_n=2,
+        lexical_grounding=False,
+    )
+    assert [c.chunk_id for c in selected] == [high.chunk_id, mid.chunk_id]
+
+    payload = payload_from_answer(
+        "Flood damage is covered up to fifty thousand EUR.",
+        [low, high, mid],
+        top_n=2,
+        lexical_grounding=False,
+    )
+    assert len(payload.citations) == 2
+    assert payload.citations[0].chunk_id == high.chunk_id
+
+
+def test_strategy_b_drops_ungrounded_and_may_dont_know() -> None:
+    flood = _chunk(
+        content="Flood damage is covered up to fifty thousand EUR under section A.",
+        score=0.9,
+    )
+    parking = _chunk(
+        content="Office parking permits renew every January.",
+        score=0.85,
+    )
+    selected = select_citation_chunks(
+        [flood, parking],
+        "Flood damage is covered up to fifty thousand EUR under section A.",
+        top_n=2,
+        lexical_grounding=True,
+    )
+    assert [c.chunk_id for c in selected] == [flood.chunk_id]
+
+    invented = payload_from_answer(
+        "Extraterrestrial coverage is unlimited.",
+        [flood, parking],
+        top_n=2,
+        lexical_grounding=True,
+    )
+    assert invented.citations == []
+    assert invented.confidence == 0.0
+    assert is_dont_know(invented.answer)
