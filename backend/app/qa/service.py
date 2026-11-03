@@ -207,6 +207,7 @@ def answer_question(
     tenant_id: str | None = None,
     citation_top_n: int = 3,
     lexical_grounding: bool = False,
+    near_copy_min_ratio: float | None = None,
 ) -> AnswerPayload:
     with _tracer.start_as_current_span("qa.retrieve") as span:
         if tenant_id is not None:
@@ -214,8 +215,15 @@ def answer_question(
         span.set_attribute("question.len", len(question))
         span.set_attribute("citation.top_n", citation_top_n)
         span.set_attribute("citation.lexical_grounding", lexical_grounding)
+        if near_copy_min_ratio is not None:
+            span.set_attribute("retrieval.near_copy_min_ratio", near_copy_min_ratio)
         started = time.perf_counter()
-        chunks = retrieve(session, question=question, top_k=top_k)
+        chunks = retrieve(
+            session,
+            question=question,
+            top_k=top_k,
+            near_copy_min_ratio=near_copy_min_ratio,
+        )
         span.set_attribute("retrieval.latency_ms", round((time.perf_counter() - started) * 1000, 2))
         span.set_attribute("retrieval.chunk_count", len(chunks))
 

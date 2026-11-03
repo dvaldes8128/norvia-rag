@@ -37,6 +37,7 @@ def ask(body: AskRequest, principal: CurrentTenant) -> AskResponse:
         tenant_id=principal.tenant_id,
         citation_top_n=body.citation_top_n,
         lexical_grounding=body.lexical_grounding,
+        near_copy_min_ratio=body.near_copy_min_ratio,
         **redacted_text("question", body.question),
     )
     with tenant_session(principal.tenant_id) as session:
@@ -46,6 +47,7 @@ def ask(body: AskRequest, principal: CurrentTenant) -> AskResponse:
             tenant_id=principal.tenant_id,
             citation_top_n=body.citation_top_n,
             lexical_grounding=body.lexical_grounding,
+            near_copy_min_ratio=body.near_copy_min_ratio,
         )
     logger.info(
         "ask.completed",
@@ -66,7 +68,11 @@ def ask_stream(body: AskRequest, principal: CurrentTenant) -> StreamingResponse:
 
     def _generate():
         with tenant_session(principal.tenant_id) as session:
-            chunks = retrieve(session, question=body.question)
+            chunks = retrieve(
+                session,
+                question=body.question,
+                near_copy_min_ratio=body.near_copy_min_ratio,
+            )
             prompt = build_prompt(body.question, chunks)
             llm = get_llm_provider()
             parts: list[str] = []

@@ -56,6 +56,8 @@ class AskRequest(BaseModel):
     # A: cite top-N by retrieval score. B: also require lexical overlap with the answer.
     citation_top_n: int = Field(default=3, ge=1, le=20)
     lexical_grounding: bool = False
+    # Retrieval near-copy gate (token_set_ratio 0–100). 0 disables; default 95.
+    near_copy_min_ratio: float = Field(default=95.0, ge=0.0, le=100.0)
 
 
 class AskResponse(BaseModel):

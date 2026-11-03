@@ -83,7 +83,7 @@ Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
 | DELETE | `/documents/{id}` | Soft-delete document + live chunks (`deleted_at`; retrieval ignores them) |
 | GET | `/jobs/{job_id}` | Job status (`pending\|processing\|completed\|failed`) |
 | GET | `/jobs` | Recent jobs for the tenant |
-| POST | `/ask` | `{question, citation_top_n?=3, lexical_grounding?=false}` → answer + citations + confidence. LLM outage → **503** (`provider_error`) |
+| POST | `/ask` | `{question, citation_top_n?=3, lexical_grounding?=false, near_copy_min_ratio?=95}` → answer + citations + confidence. LLM outage → **503** (`provider_error`) |
 | POST | `/ask/stream` | Streaming answer + meta trailer |
 | GET | `/health` | Liveness |
 

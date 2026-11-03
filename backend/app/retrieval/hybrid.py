@@ -17,6 +17,7 @@ from app.core.telemetry import get_tracer
 from app.db.models import Chunk, Document
 from app.providers.base import EmbeddingsProvider
 from app.providers.factory import get_embeddings_provider
+from app.retrieval.near_copy import is_near_copy
 
 # Generated column lives in Postgres only (see migration 0001_initial).
 _CONTENT_TSV = literal_column("chunks.content_tsv")
@@ -97,12 +98,24 @@ def retrieve(
     vector_weight: float | None = None,
     text_weight: float | None = None,
     candidate_pool: int | None = None,
+    near_copy_min_ratio: float | None = None,
 ) -> list[RetrievedChunk]:
-    """Return top-k chunks for ``question`` under the current tenant session."""
+    """Return top-k chunks for ``question`` under the current tenant session.
+
+    After hybrid fusion, candidates must pass a near-copy fuzzy gate against the
+    question (``token_set_ratio >= near_copy_min_ratio``). Ratio ``0`` disables
+    the gate. Default is strict (95) — typical NL questions often score ~70 vs
+    policy prose, so callers/eval may lower or disable it.
+    """
     k = top_k if top_k is not None else settings.retrieval_top_k
     vw = settings.hybrid_vector_weight if vector_weight is None else vector_weight
     tw = settings.hybrid_text_weight if text_weight is None else text_weight
     pool = candidate_pool if candidate_pool is not None else max(k * 4, 20)
+    min_ratio = (
+        settings.retrieval_near_copy_min_ratio
+        if near_copy_min_ratio is None
+        else near_copy_min_ratio
+    )
 
     provider = embeddings or get_embeddings_provider()
     with _tracer.start_as_current_span("retrieval.embed_query") as span:
@@ -139,10 +152,13 @@ def retrieve(
         zip(rows, fused, vector_scores, text_scores, strict=True),
         key=lambda item: item[1],
         reverse=True,
-    )[:k]
+    )
 
     results: list[RetrievedChunk] = []
     for row, score, v, t in ranked:
+        content = row.content  # type: ignore[attr-defined]
+        if not is_near_copy(question, content, min_ratio=min_ratio):
+            continue
         results.append(
             RetrievedChunk(
                 chunk_id=row.id,  # type: ignore[attr-defined]
@@ -150,10 +166,12 @@ def retrieve(
                 filename=row.filename,  # type: ignore[attr-defined]
                 page_number=row.page_number,  # type: ignore[attr-defined]
                 chunk_index=row.chunk_index,  # type: ignore[attr-defined]
-                content=row.content,  # type: ignore[attr-defined]
+                content=content,
                 vector_score=v,
                 text_score=t,
                 score=score,
             )
         )
+        if len(results) >= k:
+            break
     return results

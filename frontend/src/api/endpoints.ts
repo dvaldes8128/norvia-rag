@@ -50,7 +50,11 @@ export function deleteDocument(documentId: string): Promise<DocumentDeleted> {
 
 export function askQuestion(
   question: string,
-  opts?: { citationTopN?: number; lexicalGrounding?: boolean },
+  opts?: {
+    citationTopN?: number;
+    lexicalGrounding?: boolean;
+    nearCopyMinRatio?: number;
+  },
 ): Promise<AskResponse> {
   return apiFetch<AskResponse>(
     "/ask",
@@ -60,6 +64,7 @@ export function askQuestion(
         question,
         citation_top_n: opts?.citationTopN ?? 3,
         lexical_grounding: opts?.lexicalGrounding ?? false,
+        near_copy_min_ratio: opts?.nearCopyMinRatio ?? 95,
       },
     },
   );

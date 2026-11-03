@@ -42,6 +42,12 @@
   min-max normalised per channel, then fused with
   `HYBRID_VECTOR_WEIGHT` / `HYBRID_TEXT_WEIGHT` (default 0.6 / 0.4). No reranker
   yet (keeps the path explainable and offline-friendly).
+- **Near-copy fuzzy gate** (post-fusion): keep a candidate only if
+  ``rapidfuzz.token_set_ratio(question, chunk) >= near_copy_min_ratio``
+  (default **95**, ``0`` disables; also a ``POST /ask`` field). Tolerates typos /
+  extra adjectives; rejects paraphrases. Open NL questions vs policy prose often
+  score ~70, so CI/eval sets ``RETRIEVAL_NEAR_COPY_MIN_RATIO=0`` to measure hybrid
+  recall without the gate.
 - **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
   identical bytes reuses the existing document/chunks. Partial failures re-index
   by clearing prior chunks for that document before insert. Same filename with
