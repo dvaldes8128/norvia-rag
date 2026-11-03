@@ -6,14 +6,14 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.schemas import TokenRequest, TokenResponse
 from app.config import settings
-from app.core.auth import create_access_token, ensure_tenant
+from app.core.auth import create_access_token, ensure_tenant, lookup_tenant_for_api_key
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/token", response_model=TokenResponse)
 def issue_token(body: TokenRequest) -> TokenResponse:
-    tenant_id = settings.api_key_map().get(body.api_key.strip())
+    tenant_id = lookup_tenant_for_api_key(body.api_key)
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

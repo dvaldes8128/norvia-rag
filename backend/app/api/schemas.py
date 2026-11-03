@@ -64,3 +64,67 @@ class AskResponse(BaseModel):
     answer: str
     citations: list[CitationOut]
     confidence: float = Field(ge=0.0, le=1.0)
+
+
+# ---- Admin (platform ops) ----
+
+
+class CreateTenantRequest(BaseModel):
+    id: str = Field(min_length=2, max_length=64)
+    name: str | None = Field(default=None, max_length=255)
+    key_label: str = Field(default="default", max_length=128)
+
+
+class IssueTenantKeyRequest(BaseModel):
+    label: str = Field(default="default", max_length=128)
+
+
+class AdminTenantOut(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+    document_count: int
+    job_count: int
+    api_key_prefixes: list[str]
+    env_backed: bool = False
+
+
+class AdminTenantCreated(BaseModel):
+    id: str
+    name: str
+    api_key: str
+    api_key_id: UUID
+    api_key_prefix: str
+
+
+class AdminTenantKeyIssued(BaseModel):
+    tenant_id: str
+    api_key: str
+    api_key_id: UUID
+    api_key_prefix: str
+    label: str
+
+
+class AdminQueueSnapshot(BaseModel):
+    workers: list[str]
+    worker_count: int
+    broker_queue_depth: int | None
+    active_tasks: list[dict]
+    reserved_tasks: list[dict]
+    scheduled_tasks: list[dict]
+    jobs_by_status: dict[str, int]
+
+
+class AdminTelemetrySnapshot(BaseModel):
+    service_name: str
+    traces_exporter: str
+    otlp_endpoint_configured: bool
+    llm_provider: str
+    embeddings_provider: str
+    tenant_count: int
+    document_count: int
+    chunk_count: int
+    jobs_by_status: dict[str, int]
+    worker_count: int
+    recent_failed_jobs: list[dict]
+    note: str

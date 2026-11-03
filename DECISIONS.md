@@ -190,6 +190,15 @@ queryable archive.
 - LiteLLM / multi-provider router
 - Blocking `mypy` in CI (remains non-gating / `|| true`)
 
+### Admin panel (ops, post-D4)
+- **In scope:** SPA **Admin** tab + `/admin/*` behind `X-Admin-Key` /
+  `ADMIN_API_KEY` — create tenants (issues a one-time DB-hashed API key),
+  Celery/Redis queue snapshot, operational telemetry (counts, exporter config,
+  recent failed jobs, worker ping).
+- **Still not a cost dashboard:** token/$ math stays on OTel span attributes;
+  the panel only surfaces ops health. Env `TENANT_API_KEYS` continues to work
+  alongside DB keys (`tenant_api_keys`, migration `0003`).
+
 ## Observability (Q3 / Q6 / E6)
 
 ### Tracing — exporter choice & context propagation

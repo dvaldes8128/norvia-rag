@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-norvia}
       POSTGRES_DB: ${POSTGRES_DB:-norvia}
     ports:
-      - "5432:5432"
+      # Host 5432 is often taken by a local Postgres; map to 5433 for demos.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

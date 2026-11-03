@@ -51,6 +51,36 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    api_keys: Mapped[list[TenantApiKey]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+
+
+class TenantApiKey(Base):
+    """Hashed API keys issued by the admin panel (env TENANT_API_KEYS still work)."""
+
+    __tablename__ = "tenant_api_keys"
+    __table_args__ = (
+        Index(
+            "uq_tenant_api_keys_hash_live",
+            "key_hash",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    key_hash: Mapped[str] = mapped_column(String(64))
+    key_prefix: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(128), default="default")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="api_keys")
+
 
 class Document(Base):
     __tablename__ = "documents"

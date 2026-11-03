@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     tenant_api_keys: str = ""  # "tenant:key,tenant2:key2"
+    # Platform admin (ops panel). Empty disables /admin/* (401).
+    admin_api_key: str = ""
 
     # Providers
     llm_provider: str = "fake"

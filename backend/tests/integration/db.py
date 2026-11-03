@@ -101,6 +101,7 @@ def wipe_all_data(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE chunks, ingestion_jobs, documents, tenants RESTART IDENTITY CASCADE"
+                "TRUNCATE TABLE chunks, ingestion_jobs, documents, tenant_api_keys, tenants "
+                "RESTART IDENTITY CASCADE"
             )
         )

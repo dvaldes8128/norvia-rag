@@ -496,3 +496,135 @@ textarea {
   text-align: center;
   color: var(--ink-muted);
 }
+
+.mode-switch {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.admin {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin__tabs,
+.admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.admin__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1.1rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .admin__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.admin__form input {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.admin__stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.admin__stats > div {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.admin__stats dt {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.admin__stats dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.admin__workers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin__secret {
+  display: block;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px dashed var(--line);
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+.admin__muted {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.admin__subh {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-family: var(--font-display);
+}
+
+.admin-gate {
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.admin-gate h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+}

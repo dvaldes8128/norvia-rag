@@ -35,8 +35,28 @@ docker compose up --build
 - API: http://localhost:8000  (health: `/health`)
 - Frontend: http://localhost:5173
 
+### Demo login
+
+The SPA has no username/password — paste a **tenant API key** in the Connect field
+(values come from `TENANT_API_KEYS` in `.env` / `.env.example`):
+
+| Tenant | API key (paste this) |
+|--------|----------------------|
+| `acme` | `devkey-acme` |
+| `globex` | `devkey-globex` |
+
+Same keys work for curl as `X-API-Key: …`, or exchange via `POST /auth/token` for a JWT.
+
+### Admin panel
+
+Switch the SPA to the **Admin** tab and paste `ADMIN_API_KEY` (default demo:
+`dev-admin-key`). From there you can create tenants (one-time API key shown once),
+inspect Celery/Redis queue depth + workers, and see operational telemetry (counts,
+exporter config, recent failed jobs). Not a live dollar-cost dashboard — tokens stay
+on OTel spans (D4).
+
 Everything runs with **deterministic fake** LLM + embedding providers by default — no
-external API keys required. Set `LLM_PROVIDER=real` / `EMBEDDINGS_PROVIDER=real` and the
+external LLM API keys required. Set `LLM_PROVIDER=real` / `EMBEDDINGS_PROVIDER=real` and the
 `REAL_*` vars to use the custom real adapter.
 
 ## Tests
@@ -85,6 +105,12 @@ Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
 | GET | `/jobs` | Recent jobs for the tenant |
 | POST | `/ask` | `{question, citation_top_n?=3, lexical_grounding?=false, near_copy_min_ratio?=95}` → answer + citations + confidence. LLM outage → **503** (`provider_error`) |
 | POST | `/ask/stream` | Streaming answer + meta trailer |
+| GET | `/admin/tenants` | List tenants (requires `X-Admin-Key`) |
+| POST | `/admin/tenants` | Create tenant + issue one-time API key |
+| POST | `/admin/tenants/{id}/keys` | Issue another API key |
+| POST | `/admin/tenants/{id}/keys/{key_id}/revoke` | Revoke a DB-issued key |
+| GET | `/admin/queues` | Celery workers + broker depth + job status counts |
+| GET | `/admin/telemetry` | Ops overview (OTel config, counts, recent failures — not a $ dashboard) |
 | GET | `/health` | Liveness |
 
 ## Observability (OpenTelemetry + structured logs)

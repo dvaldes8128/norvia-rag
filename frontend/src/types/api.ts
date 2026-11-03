@@ -62,3 +62,59 @@ export interface ApiErrorBody {
   code?: string;
   detail?: string | FilenameConflictDetail | { msg?: string }[];
 }
+
+export interface AdminTenantOut {
+  id: string;
+  name: string;
+  created_at: string;
+  document_count: number;
+  job_count: number;
+  api_key_prefixes: string[];
+  env_backed: boolean;
+}
+
+export interface AdminTenantCreated {
+  id: string;
+  name: string;
+  api_key: string;
+  api_key_id: string;
+  api_key_prefix: string;
+}
+
+export interface AdminTenantKeyIssued {
+  tenant_id: string;
+  api_key: string;
+  api_key_id: string;
+  api_key_prefix: string;
+  label: string;
+}
+
+export interface AdminQueueSnapshot {
+  workers: string[];
+  worker_count: number;
+  broker_queue_depth: number | null;
+  active_tasks: Record<string, unknown>[];
+  reserved_tasks: Record<string, unknown>[];
+  scheduled_tasks: Record<string, unknown>[];
+  jobs_by_status: Record<string, number>;
+}
+
+export interface AdminTelemetrySnapshot {
+  service_name: string;
+  traces_exporter: string;
+  otlp_endpoint_configured: boolean;
+  llm_provider: string;
+  embeddings_provider: string;
+  tenant_count: number;
+  document_count: number;
+  chunk_count: number;
+  jobs_by_status: Record<string, number>;
+  worker_count: number;
+  recent_failed_jobs: {
+    job_id: string;
+    tenant_id: string;
+    error: string | null;
+    updated_at: string | null;
+  }[];
+  note: string;
+}
