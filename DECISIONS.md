@@ -132,13 +132,16 @@ No full version history table and no pin-citation-to-version: only the latest
 confirmed version is active. Field `version` is the audit counter, not a
 queryable archive.
 
-#### Gap vs current code (to implement or declare)
-Today the pipeline keys only on `(tenant_id, content_hash)` and never links
-same-filename uploads; `version` stays at 1; there is no `deleted_at` and no
-delete endpoint. Closing D3 in the deliverable means either implementing the
-confirm + soft-delete path above or stating clearly in README that the policy is
-decided and the confirm/soft-delete path is the next increment — prefer
-implementing the minimal path before the single delivery push if time allows.
+#### Implementation (2026-11-03)
+- Migration `0002_d3_soft_delete`: `deleted_at` on `documents` / `chunks`; live-only
+  unique indexes on `(tenant_id, content_hash)` and `(document_id, chunk_index)`.
+- `POST /upload` detects same live filename + new hash → **409**
+  `filename_conflict`; retry with `?confirm=replace|as_new` (+
+  `replace_document_id` for replace). Celery passes `replace_mode` into
+  `ingest_file`.
+- `DELETE /documents/{id}` soft-deletes document + live chunks.
+- Hybrid retrieval and eval count only `deleted_at IS NULL` rows.
+- Frontend: confirm box on 409; Delete on completed jobs.
 
 ### D4 — Production quality & cost metrics
 **Decided** (same decision card).
@@ -238,7 +241,7 @@ landed on `main`.
 | Ingestion | PDF extract, overlapping chunker, Celery task lifecycle | Permanent vs transient errors; hash idempotency; no silent filename replace (D3) |
 | Retrieval + QA | Hybrid fuse SQL, Pydantic answer schema, citation re-check, prompt wrappers | Fake embeddings = lexical hashing so `recall@k` is meaningful; “I don’t know” path |
 | Providers | Fake LLM/embeddings + real OpenAI-compatible client (timeouts, tenacity, 429) | No LiteLLM (D4); we own retry/rate-limit behaviour |
-| Frontend | Upload, job polling, chat + citation UI | Kept intentionally small; no version-confirm UI yet (D3 gap) |
+| Frontend | Upload, job polling, chat + citation UI | Version-confirm on 409 + soft-delete button; no history/undelete UI (D4) |
 | Eval + tests | Synthetic corpus, `eval.run`, unit + integration + RLS isolation | CI gate `recall@5 ≥ 0.8`; report committed under `eval/reports/` |
 | Observability | OTel bootstrap, Celery context propagation, structlog + redaction | SQLAlchemy `<2.1` pin so DB spans appear; console exporter default |
 | Docs | README trace evidence (E6), D3/D4 write-up from decision card | Decisions are ours; AI only phrased the agreed policy |
@@ -252,8 +255,7 @@ landed on `main`.
 3. **Manual / in-process checks:** unit tests for chunking, citation validation, telemetry
    idempotency, log correlation/redaction; captured console span tree for E6 in README.
 4. **Code review:** every AI patch is read for security (tenant binding, upload magic
-   bytes, prompt-injection wrappers) and for doc↔code drift (D3 soft-delete still a
-   declared gap — see below and README).
+   bytes, prompt-injection wrappers) and for doc↔code drift (D3 confirm + soft-delete).
 5. **Interview bar:** we only ship behaviour we can walk through on screen (C4).
 
 ### Explicit honesty

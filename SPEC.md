@@ -199,5 +199,5 @@ Cliente (tenant X) --POST /ask { question }--> API
 - [x] Q5 Docker Compose único + CI
 - [x] Q6 Logging estructurado con correlación — structlog + `X-Request-ID` propagado a
       Celery; redacción de contenido/pregunta (len/hash/preview), nunca texto completo
-- [x] D1–D4 justificados en `DECISIONS.md` (D3 policy decided; confirm/soft-delete **code gap**)
+- [x] D1–D4 justificados en `DECISIONS.md` (D3 confirm + soft-delete implemented)
 - [x] E1–E6 Entregables — E6: traza OTel; E3 incluye sección «How we use generative AI»

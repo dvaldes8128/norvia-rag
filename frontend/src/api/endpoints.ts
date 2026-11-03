@@ -1,9 +1,11 @@
 import { apiFetch, saveAuth, type AuthState } from "./client";
 import type {
   AskResponse,
+  DocumentDeleted,
   JobStatusResponse,
   TokenResponse,
   UploadAccepted,
+  UploadConfirm,
 } from "../types/api";
 
 export async function exchangeToken(apiKey: string): Promise<AuthState> {
@@ -21,10 +23,17 @@ export async function exchangeToken(apiKey: string): Promise<AuthState> {
   return state;
 }
 
-export function uploadPdf(file: File): Promise<UploadAccepted> {
+export function uploadPdf(
+  file: File,
+  opts?: { confirm?: UploadConfirm; replaceDocumentId?: string },
+): Promise<UploadAccepted> {
   const body = new FormData();
   body.append("file", file);
-  return apiFetch<UploadAccepted>("/upload", { method: "POST", body });
+  const params = new URLSearchParams();
+  if (opts?.confirm) params.set("confirm", opts.confirm);
+  if (opts?.replaceDocumentId) params.set("replace_document_id", opts.replaceDocumentId);
+  const qs = params.toString();
+  return apiFetch<UploadAccepted>(`/upload${qs ? `?${qs}` : ""}`, { method: "POST", body });
 }
 
 export function listJobs(limit = 50): Promise<JobStatusResponse[]> {
@@ -33,6 +42,10 @@ export function listJobs(limit = 50): Promise<JobStatusResponse[]> {
 
 export function getJob(jobId: string): Promise<JobStatusResponse> {
   return apiFetch<JobStatusResponse>(`/jobs/${jobId}`);
+}
+
+export function deleteDocument(documentId: string): Promise<DocumentDeleted> {
+  return apiFetch<DocumentDeleted>(`/documents/${documentId}`, { method: "DELETE" });
 }
 
 export function askQuestion(question: string): Promise<AskResponse> {

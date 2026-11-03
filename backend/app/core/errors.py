@@ -34,15 +34,21 @@ def register_exception_handlers(app: FastAPI) -> None:
             401: "unauthorized",
             403: "forbidden",
             404: "not_found",
+            409: "conflict",
             413: "payload_too_large",
             415: "unsupported_media_type",
             422: "validation_error",
         }.get(exc.status_code, "http_error")
+        detail = exc.detail
+        error = str(detail)
+        if isinstance(detail, dict):
+            code = str(detail.get("code") or code)
+            error = str(detail.get("message") or detail.get("error") or error)
         return _envelope(
             exc.status_code,
-            error=str(exc.detail),
+            error=error,
             code=code,
-            detail=exc.detail,
+            detail=detail,
         )
 
     @app.exception_handler(RequestValidationError)

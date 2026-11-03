@@ -15,6 +15,18 @@ from app.db.session import tenant_session
 router = APIRouter(tags=["ingestion"])
 
 
+def _job_document_fields(
+    doc: Document | None,
+) -> tuple[str | None, UUID | None]:
+    """Filename always; document_id only when the doc is still live (D3)."""
+    if doc is None:
+        return None, None
+    filename = doc.filename
+    if doc.deleted_at is not None:
+        return f"{filename} (deleted)", None
+    return filename, doc.id
+
+
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
 def get_job_status(job_id: UUID, principal: CurrentTenant) -> JobStatusResponse:
     with tenant_session(principal.tenant_id) as session:
@@ -24,16 +36,13 @@ def get_job_status(job_id: UUID, principal: CurrentTenant) -> JobStatusResponse:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Job not found",
             )
-        filename: str | None = None
-        if job.document_id is not None:
-            doc = session.get(Document, job.document_id)
-            if doc is not None:
-                filename = doc.filename
+        doc = session.get(Document, job.document_id) if job.document_id else None
+        filename, document_id = _job_document_fields(doc)
         return JobStatusResponse(
             job_id=job.id,
             status=job.status,
             filename=filename,
-            document_id=job.document_id,
+            document_id=document_id,
             error=job.error,
             created_at=job.created_at,
             updated_at=job.updated_at,
@@ -52,19 +61,23 @@ def list_jobs(principal: CurrentTenant, limit: int = 50) -> list[JobStatusRespon
             .limit(limit)
         ).all()
         doc_ids = [j.document_id for j in jobs if j.document_id is not None]
-        filenames: dict[UUID, str] = {}
+        docs_by_id: dict[UUID, Document] = {}
         if doc_ids:
             docs = session.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
-            filenames = {d.id: d.filename for d in docs}
-        return [
-            JobStatusResponse(
-                job_id=j.id,
-                status=j.status,
-                filename=filenames.get(j.document_id) if j.document_id else None,
-                document_id=j.document_id,
-                error=j.error,
-                created_at=j.created_at,
-                updated_at=j.updated_at,
+            docs_by_id = {d.id: d for d in docs}
+        results: list[JobStatusResponse] = []
+        for j in jobs:
+            doc = docs_by_id.get(j.document_id) if j.document_id else None
+            filename, document_id = _job_document_fields(doc)
+            results.append(
+                JobStatusResponse(
+                    job_id=j.id,
+                    status=j.status,
+                    filename=filename,
+                    document_id=document_id,
+                    error=j.error,
+                    created_at=j.created_at,
+                    updated_at=j.updated_at,
+                )
             )
-            for j in jobs
-        ]
+        return results

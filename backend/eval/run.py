@@ -91,9 +91,15 @@ def _evaluate(tenant_id: str, *, k: int) -> list[QuestionResult]:
     with tenant_session(tenant_id) as session:
         docs = {
             str(row.id): _stem_from_filename(row.filename)
-            for row in session.scalars(select(Document)).all()
+            for row in session.scalars(
+                select(Document).where(Document.deleted_at.is_(None))
+            ).all()
         }
-        chunk_count = session.scalar(select(func.count()).select_from(Chunk))
+        chunk_count = session.scalar(
+            select(func.count())
+            .select_from(Chunk)
+            .where(Chunk.deleted_at.is_(None))
+        )
         if not chunk_count:
             raise RuntimeError("No chunks indexed for eval tenant")
 

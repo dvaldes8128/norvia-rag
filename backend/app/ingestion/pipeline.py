@@ -1,13 +1,14 @@
-"""Ingestion pipeline: extract → chunk → embed → idempotent upsert (F2.1–F2.5)."""
+"""Ingestion pipeline: extract → chunk → embed → idempotent upsert (F2.1–F2.5, D3)."""
 
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -23,6 +24,8 @@ from app.providers.factory import get_embeddings_provider
 logger = get_logger(__name__)
 _tracer = get_tracer(__name__)
 
+ReplaceMode = str | None  # None | "replace" | "as_new"
+
 
 @dataclass(frozen=True)
 class IngestionResult:
@@ -31,6 +34,16 @@ class IngestionResult:
     page_count: int
     chunk_count: int
     reused: bool
+    version: int
+    replaced: bool = False
+
+
+@dataclass(frozen=True)
+class FilenameConflict:
+    document_id: UUID
+    filename: str
+    version: int
+    content_hash: str
 
 
 def content_sha256(path: str | Path) -> str:
@@ -41,6 +54,87 @@ def content_sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+def find_live_by_hash(session: Session, *, tenant_id: str, content_hash: str) -> Document | None:
+    return session.scalar(
+        select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.content_hash == content_hash,
+            Document.deleted_at.is_(None),
+        )
+    )
+
+
+def find_live_by_filename(
+    session: Session,
+    *,
+    tenant_id: str,
+    filename: str,
+) -> Document | None:
+    """Most recently created live document with this filename (D3 conflict target)."""
+    return session.scalar(
+        select(Document)
+        .where(
+            Document.tenant_id == tenant_id,
+            Document.filename == filename,
+            Document.deleted_at.is_(None),
+        )
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    )
+
+
+def detect_filename_conflict(
+    session: Session,
+    *,
+    tenant_id: str,
+    filename: str,
+    content_hash: str,
+) -> FilenameConflict | None:
+    """Same live filename + different bytes → operator must confirm (D3)."""
+    if find_live_by_hash(session, tenant_id=tenant_id, content_hash=content_hash) is not None:
+        return None
+    existing = find_live_by_filename(session, tenant_id=tenant_id, filename=filename)
+    if existing is None or existing.content_hash == content_hash:
+        return None
+    return FilenameConflict(
+        document_id=existing.id,
+        filename=existing.filename,
+        version=existing.version,
+        content_hash=existing.content_hash,
+    )
+
+
+def soft_delete_live_chunks(session: Session, *, document_id: UUID, when: datetime | None = None) -> int:
+    stamp = when or datetime.now(UTC)
+    result = session.execute(
+        update(Chunk)
+        .where(Chunk.document_id == document_id, Chunk.deleted_at.is_(None))
+        .values(deleted_at=stamp)
+    )
+    return int(result.rowcount or 0)
+
+
+def soft_delete_document(session: Session, *, document_id: UUID) -> Document | None:
+    """Mark document + live chunks inactive. Returns the document or None if missing/already gone."""
+    document = session.get(Document, document_id)
+    if document is None or document.deleted_at is not None:
+        return None
+    stamp = datetime.now(UTC)
+    document.deleted_at = stamp
+    soft_delete_live_chunks(session, document_id=document_id, when=stamp)
+    session.flush()
+    return document
+
+
+def _active_chunk_count(session: Session, document_id: UUID) -> int:
+    count = session.scalar(
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.document_id == document_id, Chunk.deleted_at.is_(None))
+    )
+    return int(count or 0)
+
+
 def ingest_file(
     session: Session,
     *,
@@ -48,13 +142,17 @@ def ingest_file(
     file_path: str | Path,
     filename: str,
     embeddings: EmbeddingsProvider | None = None,
+    replace_mode: ReplaceMode = None,
+    replace_document_id: UUID | None = None,
 ) -> IngestionResult:
     """Run the full ingestion pipeline inside an open tenant-scoped session.
 
-    Idempotency (F2.5):
-    * ``UNIQUE(tenant_id, content_hash)`` — same bytes → same document.
-    * If that document already has chunks, return it without re-embedding.
-    * If the document exists but has zero chunks (partial prior failure), re-index.
+    Idempotency (F2.5) + versioning (D3):
+    * Live ``(tenant_id, content_hash)`` — same bytes → reuse, no re-embed.
+    * Same live filename + different bytes — require ``replace_mode``:
+      ``replace`` bumps ``version``, soft-deletes prior chunks, re-indexes;
+      ``as_new`` creates a separate document leaving the previous live.
+    * Partial failures soft-delete leftover live chunks for that document before insert.
     """
     path = Path(file_path)
     if not path.is_file():
@@ -72,46 +170,81 @@ def ingest_file(
     if not chunks:
         raise PermanentIngestionError("No chunks produced from PDF text")
 
-    existing = session.scalar(
-        select(Document).where(
-            Document.tenant_id == tenant_id,
-            Document.content_hash == content_hash,
-        )
-    )
+    existing = find_live_by_hash(session, tenant_id=tenant_id, content_hash=content_hash)
+    replaced = False
 
     if existing is not None:
-        existing_count = session.scalar(
-            select(func.count()).select_from(Chunk).where(Chunk.document_id == existing.id)
-        )
-        if existing_count and existing_count > 0:
+        existing_count = _active_chunk_count(session, existing.id)
+        if existing_count > 0:
             logger.info(
                 "ingestion.idempotent_hit",
                 tenant_id=tenant_id,
                 document_id=str(existing.id),
                 chunk_count=existing_count,
             )
-            # Refresh filename if the same bytes were uploaded under another name.
             if existing.filename != filename:
                 existing.filename = filename
             return IngestionResult(
                 document_id=existing.id,
                 content_hash=content_hash,
                 page_count=existing.page_count,
-                chunk_count=int(existing_count),
+                chunk_count=existing_count,
                 reused=True,
+                version=existing.version,
+                replaced=False,
             )
         document = existing
         document.page_count = page_count
         document.filename = filename
     else:
-        document = Document(
-            tenant_id=tenant_id,
-            filename=filename,
-            content_hash=content_hash,
-            page_count=page_count,
-        )
-        session.add(document)
-        session.flush()
+        name_hit = find_live_by_filename(session, tenant_id=tenant_id, filename=filename)
+        if name_hit is not None and name_hit.content_hash != content_hash:
+            mode = (replace_mode or "").strip().lower() or None
+            if mode == "replace":
+                target_id = replace_document_id or name_hit.id
+                document = session.get(Document, target_id)
+                if (
+                    document is None
+                    or document.deleted_at is not None
+                    or document.tenant_id != tenant_id
+                    or document.filename != filename
+                ):
+                    raise PermanentIngestionError(
+                        "replace_document_id does not match a live document with this filename"
+                    )
+                soft_delete_live_chunks(session, document_id=document.id)
+                document.content_hash = content_hash
+                document.page_count = page_count
+                document.version = int(document.version) + 1
+                replaced = True
+                logger.info(
+                    "ingestion.version_replace",
+                    tenant_id=tenant_id,
+                    document_id=str(document.id),
+                    version=document.version,
+                )
+            elif mode == "as_new":
+                document = Document(
+                    tenant_id=tenant_id,
+                    filename=filename,
+                    content_hash=content_hash,
+                    page_count=page_count,
+                )
+                session.add(document)
+                session.flush()
+            else:
+                raise PermanentIngestionError(
+                    "Filename conflict: pass confirm=replace or confirm=as_new"
+                )
+        else:
+            document = Document(
+                tenant_id=tenant_id,
+                filename=filename,
+                content_hash=content_hash,
+                page_count=page_count,
+            )
+            session.add(document)
+            session.flush()
 
     provider = embeddings or get_embeddings_provider()
     try:
@@ -129,8 +262,8 @@ def ingest_file(
             f"Embeddings count mismatch: got {len(vectors)}, expected {len(chunks)}"
         )
 
-    # Replace any partial chunk set for this document (retry-safe).
-    session.execute(delete(Chunk).where(Chunk.document_id == document.id))
+    # Soft-delete any leftover live chunks (retry-safe; D3 keeps history).
+    soft_delete_live_chunks(session, document_id=document.id)
     session.flush()
 
     for text_chunk, vector in zip(chunks, vectors, strict=True):
@@ -153,6 +286,8 @@ def ingest_file(
         document_id=str(document.id),
         page_count=page_count,
         chunk_count=len(chunks),
+        version=document.version,
+        replaced=replaced,
     )
     return IngestionResult(
         document_id=document.id,
@@ -160,4 +295,6 @@ def ingest_file(
         page_count=page_count,
         chunk_count=len(chunks),
         reused=False,
+        version=document.version,
+        replaced=replaced,
     )

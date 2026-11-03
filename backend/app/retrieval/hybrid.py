@@ -71,16 +71,21 @@ def fuse_scores(
 
 def _candidate_select(question: str, query_vec: list[float]) -> Select:
     tsq = func.plainto_tsquery("english", question)
-    return select(
-        Chunk.id,
-        Chunk.document_id,
-        Chunk.page_number,
-        Chunk.chunk_index,
-        Chunk.content,
-        (1 - Chunk.embedding.cosine_distance(query_vec)).label("vector_score"),
-        func.coalesce(func.ts_rank(_CONTENT_TSV, tsq), 0.0).label("text_score"),
-        Document.filename,
-    ).join(Document, Document.id == Chunk.document_id)
+    return (
+        select(
+            Chunk.id,
+            Chunk.document_id,
+            Chunk.page_number,
+            Chunk.chunk_index,
+            Chunk.content,
+            (1 - Chunk.embedding.cosine_distance(query_vec)).label("vector_score"),
+            func.coalesce(func.ts_rank(_CONTENT_TSV, tsq), 0.0).label("text_score"),
+            Document.filename,
+        )
+        .join(Document, Document.id == Chunk.document_id)
+        # D3: soft-deleted docs/chunks must not dilute scores or back citations.
+        .where(Chunk.deleted_at.is_(None), Document.deleted_at.is_(None))
+    )
 
 
 def retrieve(

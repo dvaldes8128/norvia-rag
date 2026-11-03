@@ -14,6 +14,12 @@ class UploadAccepted(BaseModel):
     filename: str
 
 
+class DocumentDeleted(BaseModel):
+    document_id: UUID
+    filename: str
+    deleted: bool = True
+
+
 class JobStatusResponse(BaseModel):
     job_id: UUID
     status: str

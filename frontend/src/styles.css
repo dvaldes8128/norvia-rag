@@ -179,9 +179,9 @@ textarea {
 
 .upload-panel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.65rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
 }
 
 .btn {
@@ -237,6 +237,36 @@ textarea {
   margin: 0;
   color: var(--ok);
   font-size: 0.9rem;
+}
+
+.confirm-box {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--busy) 45%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--busy) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.confirm-box__title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.confirm-box__body {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+.confirm-box__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .empty {

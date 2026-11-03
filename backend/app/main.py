@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from app.api import ask, auth, jobs, uploads
+from app.api import ask, auth, documents, jobs, uploads
 from app.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
@@ -39,6 +39,7 @@ FastAPIInstrumentor.instrument_app(app)
 app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(jobs.router)
+app.include_router(documents.router)
 app.include_router(ask.router)
 
 

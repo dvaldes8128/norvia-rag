@@ -58,6 +58,8 @@ def process_ingestion(
     file_path: str,
     filename: str,
     correlation_id: str | None = None,
+    replace_mode: str | None = None,
+    replace_document_id: str | None = None,
 ) -> dict[str, str | int | bool]:
     """Extract → chunk → embed → upsert; drive job status through the lifecycle."""
     # Bind the correlation id passed from the upload endpoint so worker logs match the
@@ -73,6 +75,7 @@ def process_ingestion(
         tenant_id=tenant_id,
         job_id=job_id,
         filename=filename,
+        replace_mode=replace_mode,
     )
     _set_job_status(tenant_id=tenant_id, job_id=job_id, status=JobStatus.processing)
 
@@ -83,6 +86,10 @@ def process_ingestion(
                 tenant_id=tenant_id,
                 file_path=file_path,
                 filename=filename,
+                replace_mode=replace_mode,
+                replace_document_id=(
+                    UUID(replace_document_id) if replace_document_id else None
+                ),
             )
             job = session.get(IngestionJob, UUID(job_id))
             if job is not None:
@@ -97,6 +104,8 @@ def process_ingestion(
             "chunk_count": result.chunk_count,
             "page_count": result.page_count,
             "reused": result.reused,
+            "replaced": result.replaced,
+            "version": result.version,
             "status": JobStatus.completed.value,
         }
 

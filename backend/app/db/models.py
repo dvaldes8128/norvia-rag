@@ -21,8 +21,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -55,9 +55,20 @@ class Tenant(Base):
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
-        # Idempotency: the same file content uploaded again by the same tenant
-        # resolves to the same document instead of duplicating.
-        UniqueConstraint("tenant_id", "content_hash", name="uq_document_tenant_hash"),
+        # Live-row idempotency (D3): soft-deleted hashes may repeat; see migration 0002.
+        Index(
+            "uq_document_tenant_hash_live",
+            "tenant_id",
+            "content_hash",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_documents_tenant_filename_live",
+            "tenant_id",
+            "filename",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
@@ -68,6 +79,7 @@ class Document(Base):
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 hex
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chunks: Mapped[list[Chunk]] = relationship(
@@ -102,7 +114,14 @@ class IngestionJob(Base):
 class Chunk(Base):
     __tablename__ = "chunks"
     __table_args__ = (
-        UniqueConstraint("document_id", "chunk_index", name="uq_chunk_doc_index"),
+        # Soft-deleted chunks keep their index; uniqueness applies to live rows only (D3).
+        Index(
+            "uq_chunk_doc_index_live",
+            "document_id",
+            "chunk_index",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index(
             "ix_chunks_embedding_hnsw",
             "embedding",
@@ -124,5 +143,6 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="chunks")

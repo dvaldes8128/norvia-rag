@@ -4,11 +4,15 @@ const API_BASE = "/api";
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string | null;
+  readonly detail: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null, detail: unknown = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -54,17 +58,31 @@ function authHeaders(): HeadersInit {
   return { "X-API-Key": current.apiKey };
 }
 
-async function parseError(res: Response): Promise<string> {
+async function parseError(res: Response): Promise<{ message: string; code: string | null; detail: unknown }> {
   try {
     const body = (await res.json()) as ApiErrorBody;
-    if (typeof body.detail === "string") return body.detail;
+    const detail = body.detail ?? null;
+    const code = body.code ?? (typeof detail === "object" && detail && "code" in detail
+      ? String((detail as { code?: string }).code)
+      : null);
+    if (typeof body.error === "string" && body.error) {
+      return { message: body.error, code, detail };
+    }
+    if (typeof body.detail === "string") return { message: body.detail, code, detail };
     if (Array.isArray(body.detail) && body.detail[0]?.msg) {
-      return body.detail.map((d) => d.msg).filter(Boolean).join("; ");
+      return {
+        message: body.detail.map((d) => d.msg).filter(Boolean).join("; "),
+        code,
+        detail,
+      };
+    }
+    if (typeof detail === "object" && detail && "message" in detail) {
+      return { message: String((detail as { message: string }).message), code, detail };
     }
   } catch {
     /* ignore */
   }
-  return res.statusText || `HTTP ${res.status}`;
+  return { message: res.statusText || `HTTP ${res.status}`, code: null, detail: null };
 }
 
 export async function apiFetch<T>(
@@ -86,7 +104,8 @@ export async function apiFetch<T>(
   }
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, body });
   if (!res.ok) {
-    throw new ApiError(res.status, await parseError(res));
+    const parsed = await parseError(res);
+    throw new ApiError(res.status, parsed.message, parsed.code, parsed.detail);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

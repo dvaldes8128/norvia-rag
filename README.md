@@ -203,8 +203,8 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 - Traces export to **console** by default (set `OTEL_EXPORTER_OTLP_ENDPOINT` to ship to a
   collector); no bundled Jaeger/Tempo in the compose stack to keep it light.
 - Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).
-- **Document versioning / delete (D3):** policy is decided in `DECISIONS.md` (confirm
-  replace-by-filename, soft-delete old chunks, bump `version`, `DELETE` soft via
-  `deleted_at`). **Not implemented in code yet** — ingest still keys only on
-  `(tenant_id, content_hash)`; no confirm flow, no `deleted_at`, no delete endpoint.
-  Same-hash re-upload remains idempotent.
+- **Document versioning / delete (D3):** implemented — same-hash re-upload stays
+  idempotent; same filename + new bytes returns **409** until
+  `confirm=replace|as_new`; replace bumps `version` and soft-deletes prior chunks;
+  `DELETE /documents/{id}` sets `deleted_at` (retrieval ignores inactive rows).
+  No version-history or undelete UI (see D4).

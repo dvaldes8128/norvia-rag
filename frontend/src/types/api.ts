@@ -2,10 +2,28 @@
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed" | string;
 
+export type UploadConfirm = "replace" | "as_new";
+
 export interface UploadAccepted {
   job_id: string;
   status: JobStatus;
   filename: string;
+}
+
+export interface FilenameConflictDetail {
+  message?: string;
+  code?: string;
+  filename: string;
+  existing_document_id: string;
+  existing_version: number;
+  existing_content_hash?: string;
+  content_hash?: string;
+}
+
+export interface DocumentDeleted {
+  document_id: string;
+  filename: string;
+  deleted: boolean;
 }
 
 export interface JobStatusResponse {
@@ -40,5 +58,7 @@ export interface AskResponse {
 }
 
 export interface ApiErrorBody {
-  detail?: string | { msg?: string }[];
+  error?: string;
+  code?: string;
+  detail?: string | FilenameConflictDetail | { msg?: string }[];
 }
