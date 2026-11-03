@@ -26,6 +26,9 @@ data/
 uploads/
 *.sqlite3
 
+# Large local embedding caches for off-CI experiments
+backend/eval/experiments/cache/
+
 # OS / editor
 .DS_Store
 .idea/

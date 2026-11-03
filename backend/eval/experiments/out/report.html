@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Norvia retrieval validation — InsuranceQA-v2</title>
+<style>
+:root {
+  --bg: #f6f3ee;
+  --ink: #1c1916;
+  --muted: #5c554c;
+  --line: #d9d0c3;
+  --card: #fffdf8;
+  --acc: #0f6b5c;
+  --ndcg: #8a4b1f;
+  --mrr: #2f4d7a;
+  --accent: #9c2f2f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #efe4d4 0%, transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, #dfe8e4 0%, transparent 55%),
+    var(--bg);
+  color: var(--ink); line-height: 1.45;
+}
+main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+h1 { font-family: "IBM Plex Serif", Georgia, serif; font-weight: 600; font-size: 2rem; margin: 0 0 .4rem; }
+h2 { font-family: "IBM Plex Serif", Georgia, serif; font-size: 1.35rem; margin: 2.2rem 0 .75rem; }
+.lede { color: var(--muted); max-width: 62ch; }
+.meta { display: flex; flex-wrap: wrap; gap: .5rem .9rem; margin: 1.2rem 0 1.8rem; color: var(--muted); font-size: .92rem; }
+.meta span { background: var(--card); border: 1px solid var(--line); padding: .25rem .55rem; border-radius: 4px; }
+.verdict {
+  background: var(--card); border-left: 4px solid var(--accent);
+  padding: 1rem 1.1rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0;
+}
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: .86rem; }
+th, td { border: 1px solid var(--line); padding: .4rem .45rem; text-align: right; }
+th { background: #efe8dc; font-weight: 600; }
+td:first-child, td:nth-child(2), th:first-child, th:nth-child(2) { text-align: left; }
+.bar-group { margin: .85rem 0 1.1rem; }
+.bar-label { font-size: .9rem; margin-bottom: .25rem; }
+.track { position: relative; height: 1.55rem; background: #ebe4d8; border-radius: 3px; margin: .2rem 0; overflow: hidden; }
+.fill { display: block; height: 100%; }
+.fill.acc { background: var(--acc); }
+.fill.ndcg { background: var(--ndcg); }
+.fill.mrr { background: var(--mrr); }
+.track em { position: absolute; left: .5rem; top: 0; bottom: 0; display: flex; align-items: center;
+  font-style: normal; font-size: .78rem; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .9em; }
+.note { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Norvia retrieval validation</h1>
+  <p class="lede">
+    Offline A/B of the hybrid retrieval pipeline (dense + lexical fuse, same weights as
+    production) on <strong>InsuranceQA-v2</strong> — the closest well-known public
+    retrieval corpus to insurance / policy Q&amp;A — using the two Ollama embedding models
+    already pulled locally.
+  </p>
+  <div class="meta">
+    <span>Generated 2026-11-03 20:05:44Z</span>
+    <span>Corpus: 250 answers</span>
+    <span>Queries: 100</span>
+    <span>Near-copy gate: 0.0 (off)</span>
+    <span>Hybrid weights: vector 0.6 / text 0.4</span>
+    <span>Embed window: 512 chars</span>
+    <span>Ollama: cpu</span>
+  </div>
+
+  <div class="verdict">
+    <strong>Headline.</strong>
+    <code>embeddinggemma</code> wins on this InsuranceQA slice: dense nDCG@10 <strong>0.936</strong>
+    (Acc@1 0.89) vs <code>nomic-embed-text</code> dense 0.847 (Acc@1 0.76).
+    Hybrid (0.6/0.4) <em>does not</em> beat dense top-1 here — it slightly hurts Acc@1 on both
+    models; only nomic gains a little coverage at @10. Practical takeaway for Norvia open QA:
+    prefer <code>embeddinggemma</code> for the vector channel and keep near-copy at 0 (or low)
+    unless the UX is quote-matching.
+  </div>
+
+  <h2>Protocol</h2>
+  <ul class="note">
+    <li>Dataset: <code>deccan-ai/insuranceQA-v2</code> test split (Feng et al. InsuranceQA).</li>
+    <li>Slice: 100 random unique questions; corpus = all their gold answers + random negatives → 250 passages (CPU-friendly; relative model comparison).</li>
+    <li>Gold = answers written for that exact question text.</li>
+    <li>Dense: cosine on L2-normalised Ollama embeddings with model task prefixes.</li>
+    <li>Hybrid: Norvia <code>fuse_scores</code> over dense ∪ BM25 candidate pools (stand-in for pgvector + FTS).</li>
+    <li>This run is an experiment harness — not the CI pytest suite.</li>
+  </ul>
+
+  <h2>Summary metrics</h2>
+  <table>
+    <thead>
+      <tr><th rowspan="2">Model</th><th rowspan="2">Mode</th><th colspan='4'>@1</th><th colspan='4'>@3</th><th colspan='4'>@5</th><th colspan='4'>@10</th></tr>
+      <tr><th>Acc</th><th>Rec</th><th>nDCG</th><th>MRR</th><th>Acc</th><th>Rec</th><th>nDCG</th><th>MRR</th><th>Acc</th><th>Rec</th><th>nDCG</th><th>MRR</th><th>Acc</th><th>Rec</th><th>nDCG</th><th>MRR</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>nomic-embed-text</code></td><td>dense</td><td>0.760</td><td>0.569</td><td>0.760</td><td>0.760</td><td>0.880</td><td>0.786</td><td>0.826</td><td>0.813</td><td>0.930</td><td>0.874</td><td>0.843</td><td>0.824</td><td>0.960</td><td>0.925</td><td>0.847</td><td>0.828</td></tr><tr><td><code>nomic-embed-text</code></td><td>hybrid</td><td>0.710</td><td>0.538</td><td>0.710</td><td>0.710</td><td>0.920</td><td>0.813</td><td>0.834</td><td>0.807</td><td>0.950</td><td>0.876</td><td>0.842</td><td>0.814</td><td>0.990</td><td>0.941</td><td>0.852</td><td>0.819</td></tr><tr><td><code>embeddinggemma</code></td><td>dense</td><td>0.890</td><td>0.670</td><td>0.890</td><td>0.890</td><td>0.960</td><td>0.903</td><td>0.928</td><td>0.922</td><td>0.980</td><td>0.956</td><td>0.932</td><td>0.926</td><td>1.000</td><td>0.987</td><td>0.936</td><td>0.929</td></tr><tr><td><code>embeddinggemma</code></td><td>hybrid</td><td>0.820</td><td>0.630</td><td>0.820</td><td>0.820</td><td>0.950</td><td>0.878</td><td>0.898</td><td>0.882</td><td>0.970</td><td>0.910</td><td>0.904</td><td>0.886</td><td>0.990</td><td>0.973</td><td>0.905</td><td>0.888</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Accuracy@5 · nDCG@10 · MRR@10</h2>
+  <div class='bar-group'><div class='bar-label'>nomic-embed-text · dense</div><div class='bar-tracks'><div class='track'><span class='fill acc' style='width:94.9%'></span><em>acc@5 93.0%</em></div><div class='track'><span class='fill ndcg' style='width:86.4%'></span><em>ndcg@10 84.7%</em></div><div class='track'><span class='fill mrr' style='width:84.5%'></span><em>mrr@10 82.8%</em></div></div></div><div class='bar-group'><div class='bar-label'>nomic-embed-text · hybrid</div><div class='bar-tracks'><div class='track'><span class='fill acc' style='width:96.9%'></span><em>acc@5 95.0%</em></div><div class='track'><span class='fill ndcg' style='width:87.0%'></span><em>ndcg@10 85.2%</em></div><div class='track'><span class='fill mrr' style='width:83.6%'></span><em>mrr@10 81.9%</em></div></div></div><div class='bar-group'><div class='bar-label'>embeddinggemma · dense</div><div class='bar-tracks'><div class='track'><span class='fill acc' style='width:100.0%'></span><em>acc@5 98.0%</em></div><div class='track'><span class='fill ndcg' style='width:95.5%'></span><em>ndcg@10 93.6%</em></div><div class='track'><span class='fill mrr' style='width:94.8%'></span><em>mrr@10 92.9%</em></div></div></div><div class='bar-group'><div class='bar-label'>embeddinggemma · hybrid</div><div class='bar-tracks'><div class='track'><span class='fill acc' style='width:99.0%'></span><em>acc@5 97.0%</em></div><div class='track'><span class='fill ndcg' style='width:92.3%'></span><em>ndcg@10 90.5%</em></div><div class='track'><span class='fill mrr' style='width:90.6%'></span><em>mrr@10 88.8%</em></div></div></div>
+
+  <h2>Model prefixes used</h2>
+  <table>
+    <thead><tr><th>Model</th><th>Query prefix</th><th>Document prefix</th><th>Dim</th></tr></thead>
+    <tbody>
+      <tr><td><code>nomic-embed-text</code></td><td><code>search_query: </code></td><td><code>search_document: </code></td><td>768</td></tr><tr><td><code>embeddinggemma</code></td><td><code>task: search result | query: </code></td><td><code>title: none | text: </code></td><td>768</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Hybrid nDCG@10 deltas (nomic-embed-text → embeddinggemma)</h2>
+  <p class="note">Largest negative / positive per-query swings (hybrid mode). Useful to spot systematic failures.</p>
+  <table>
+    <thead><tr><th>Δ nDCG@10</th><th>nomic-embed-text</th><th>embeddinggemma</th><th>Question</th></tr></thead>
+    <tbody><tr><td>-0.37</td><td>1.00</td><td>0.63</td><td>Why Is It A Good Idea To Have Renters Insurance?</td></tr><tr><td>-0.19</td><td>1.00</td><td>0.81</td><td>Who Is The Beneficiary In Life Insurance?</td></tr><tr><td>-0.15</td><td>1.00</td><td>0.85</td><td>What Happens When You Apply For Health Insurance?</td></tr><tr><td>-0.13</td><td>0.63</td><td>0.50</td><td>Can I Get Health Insurance If I Am Obese?</td></tr><tr><td>-0.13</td><td>0.63</td><td>0.50</td><td>How Does Life Insurance Affect Taxes?</td></tr><tr><td>-0.12</td><td>0.57</td><td>0.46</td><td>How Does Auto Insurance Work?</td></tr><tr><td>-0.04</td><td>0.85</td><td>0.81</td><td>Does A Health Insurance Blood Test Check For Smoking?</td></tr><tr><td>-0.04</td><td>0.36</td><td>0.32</td><td>How Do You Buy Life Insurance?</td></tr><tr><td>+0.37</td><td>0.63</td><td>1.00</td><td>How To Choose A Home Insurance Company?</td></tr><tr><td>+0.37</td><td>0.63</td><td>1.00</td><td>How To Save Money On Renters Insurance?</td></tr><tr><td>+0.37</td><td>0.63</td><td>1.00</td><td>How To Submit A Home Insurance Claim?</td></tr><tr><td>+0.37</td><td>0.63</td><td>1.00</td><td>What Is A 457 Retirement Plan?</td></tr><tr><td>+0.50</td><td>0.50</td><td>1.00</td><td>What Are Some Cheap Health Insurance?</td></tr><tr><td>+0.57</td><td>0.43</td><td>1.00</td><td>How To Choose A Medigap Policy?</td></tr><tr><td>+0.61</td><td>0.39</td><td>1.00</td><td>What Happens To A Life Insurance Policy With No Beneficiary?</td></tr><tr><td>+0.71</td><td>0.29</td><td>1.00</td><td>Does Car Insurance Cover Dwi?</td></tr></tbody>
+  </table>
+
+  <h2>Raw artefact</h2>
+  <p class="note">Machine-readable results: <code>/home/danielvp/work/norvia-rag/backend/eval/experiments/out/results.json</code></p>
+</main>
+</body>
+</html>

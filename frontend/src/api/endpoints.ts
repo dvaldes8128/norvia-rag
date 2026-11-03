@@ -64,7 +64,7 @@ export function askQuestion(
         question,
         citation_top_n: opts?.citationTopN ?? 3,
         lexical_grounding: opts?.lexicalGrounding ?? false,
-        near_copy_min_ratio: opts?.nearCopyMinRatio ?? 95,
+        near_copy_min_ratio: opts?.nearCopyMinRatio ?? 0,
       },
     },
   );

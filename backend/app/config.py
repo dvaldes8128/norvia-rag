@@ -54,8 +54,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     hybrid_vector_weight: float = 0.6
     hybrid_text_weight: float = 0.4
-    # Near-copy fuzzy gate (rapidfuzz token_set_ratio, 0–100). 0 disables.
-    retrieval_near_copy_min_ratio: float = 95.0
+    # Near-copy fuzzy gate (rapidfuzz token_set_ratio, 0–100). 0 = off (open QA).
+    retrieval_near_copy_min_ratio: float = 0.0
 
     # Citation grounding thresholds (B); selection itself is a per-request API param
     citation_min_overlap_tokens: int = 2

@@ -104,8 +104,8 @@ def retrieve(
 
     After hybrid fusion, candidates must pass a near-copy fuzzy gate against the
     question (``token_set_ratio >= near_copy_min_ratio``). Ratio ``0`` disables
-    the gate. Default is strict (95) — typical NL questions often score ~70 vs
-    policy prose, so callers/eval may lower or disable it.
+    the gate (default — open NL QA). Raise toward 95 for near-quote demos;
+    typical questions vs policy prose often score only ~70.
     """
     k = top_k if top_k is not None else settings.retrieval_top_k
     vw = settings.hybrid_vector_weight if vector_weight is None else vector_weight

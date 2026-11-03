@@ -36,8 +36,6 @@ jobs:
       LLM_PROVIDER: fake
       EMBEDDINGS_PROVIDER: fake
       NORVIA_REQUIRE_DB: "1"
-      # Eval questions are NL, not near-copies of policy prose (~70 vs gate 95).
-      RETRIEVAL_NEAR_COPY_MIN_RATIO: "0"
     defaults:
       run:
         working-directory: backend

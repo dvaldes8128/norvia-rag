@@ -83,6 +83,14 @@ uv run python -m eval.run --k 5 --fail-under 0.8
 # → backend/eval/reports/latest.md
 ```
 
+Optional off-CI experiment (Ollama + InsuranceQA-v2 subsample; not part of GitHub Actions):
+
+```bash
+cd backend
+uv run python -m eval.experiments.insuranceqa_ollama
+# → eval/experiments/out/report.html
+```
+
 ## Repository layout
 
 ```
@@ -103,7 +111,7 @@ Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
 | DELETE | `/documents/{id}` | Soft-delete document + live chunks (`deleted_at`; retrieval ignores them) |
 | GET | `/jobs/{job_id}` | Job status (`pending\|processing\|completed\|failed`) |
 | GET | `/jobs` | Recent jobs for the tenant |
-| POST | `/ask` | `{question, citation_top_n?=3, lexical_grounding?=false, near_copy_min_ratio?=95}` → answer + citations + confidence. LLM outage → **503** (`provider_error`) |
+| POST | `/ask` | `{question, citation_top_n?=3, lexical_grounding?=false, near_copy_min_ratio?=0}` → answer + citations + confidence. LLM outage → **503** (`provider_error`) |
 | POST | `/ask/stream` | Streaming answer + meta trailer |
 | GET | `/admin/tenants` | List tenants (requires `X-Admin-Key`) |
 | POST | `/admin/tenants` | Create tenant + issue one-time API key |
@@ -229,9 +237,15 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
   the original PDF page content (offsets), so citations keep punctuation/casing/accents.
 - Traces export to **console** by default (set `OTEL_EXPORTER_OTLP_ENDPOINT` to ship to a
   collector); no bundled Jaeger/Tempo in the compose stack to keep it light.
-- Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).
+- Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations; Admin tab for
+  tenants/queues/ops telemetry).
+- **Near-copy gate** defaults to **off** (`near_copy_min_ratio=0`) so open NL questions
+  work. Set ~95 only for near-quote matching; otherwise retrieval can go empty.
 - **Document versioning / delete (D3):** implemented — same-hash re-upload stays
   idempotent; same filename + new bytes returns **409** until
   `confirm=replace|as_new`; replace bumps `version` and soft-deletes prior chunks;
   `DELETE /documents/{id}` sets `deleted_at` (retrieval ignores inactive rows).
   No version-history or undelete UI (see D4).
+- Optional off-CI experiment: InsuranceQA-v2 + Ollama embeds under
+  `backend/eval/experiments/` (see report there); synthetic recall@k remains the
+  brief deliverable (`eval/reports/latest.md`).

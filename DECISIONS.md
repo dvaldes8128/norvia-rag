@@ -44,10 +44,10 @@
   yet (keeps the path explainable and offline-friendly).
 - **Near-copy fuzzy gate** (post-fusion): keep a candidate only if
   ``rapidfuzz.token_set_ratio(question, chunk) >= near_copy_min_ratio``
-  (default **95**, ``0`` disables; also a ``POST /ask`` field). Tolerates typos /
-  extra adjectives; rejects paraphrases. Open NL questions vs policy prose often
-  score ~70, so CI/eval sets ``RETRIEVAL_NEAR_COPY_MIN_RATIO=0`` to measure hybrid
-  recall without the gate.
+  (default **0** = off for open QA; also a ``POST /ask`` field). Raise toward
+  **95** for near-quote / typo-tolerant demos. Open NL questions vs policy prose
+  often score ~70, so a strict gate empties retrieval — hence the off-by-default
+  choice for delivery.
 - **Idempotency:** `sha256(file)` + `UNIQUE(tenant_id, content_hash)`; re-upload of
   identical bytes reuses the existing document/chunks. Partial failures re-index
   by clearing prior chunks for that document before insert. Same filename with
@@ -62,6 +62,12 @@
   Every expected document ranked **#1**. Baseline kept: hybrid 0.6/0.4, chunking
   900/150. CI enforces `recall@5 ≥ 0.8` (`--fail-under 0.8` +
   `tests/integration/test_recall_eval.py`); retune only if that bar regresses.
+- **Off-CI InsuranceQA-v2 slice** (`backend/eval/experiments/`, Ollama embeds,
+  n=100 queries / 250 docs, near-copy off): **embeddinggemma** dense beat
+  nomic-embed-text and beat hybrid on Acc@1 / nDCG@10 in that FAQ slice
+  (hybrid did not improve top-1). Prefer `embeddinggemma` when wiring real
+  embeddings; keep fake + synthetic recall@k as the brief/CI path. Report:
+  `eval/experiments/out/report.html`.
 
 ### Auth & upload API
 - **Both schemes** (decision #3): `X-API-Key` / `Authorization: ApiKey …` and
