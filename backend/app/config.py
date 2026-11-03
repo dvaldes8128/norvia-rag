@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Database
-    database_url: str = "postgresql+psycopg://norvia:norvia@db:5432/norvia"
+    # The app connects as a NON-superuser role so Row-Level Security actually applies
+    # (superusers / BYPASSRLS roles ignore RLS). Migrations use the admin role.
+    database_url: str = "postgresql+psycopg://norvia_app:norvia_app@db:5432/norvia"
+    admin_database_url: str = "postgresql+psycopg://norvia:norvia@db:5432/norvia"
+    app_db_password: str = "norvia_app"
 
     # Celery / Redis
     celery_broker_url: str = "redis://redis:6379/0"

@@ -23,14 +23,30 @@
 
 ### D1 — Chunking & retrieval strategy
 - Chunk size/overlap: starting at 800–1000 tokens / 15–20% overlap (decision #5).
-- Retrieval: **hybrid** (vector similarity + PostgreSQL full-text). Reranking: TBD.
+- Retrieval: **hybrid** (vector similarity via pgvector HNSW `vector_cosine_ops` +
+  PostgreSQL full-text via a generated `content_tsv` + GIN index). Reranking: TBD.
 - **Evidence:** to be filled from the recall@k evaluation report.
 
+### Fake providers (default, offline)
+- **Fake embeddings = feature-hashing bag-of-words**, L2-normalised — deterministic *and*
+  lexically meaningful, so `recall@k` actually exercises retrieval instead of measuring
+  noise. **Fake LLM** answers from the prompt's `Context:` block (highest lexical overlap
+  with the question), and returns "I don't know" when there's no overlap — mirroring the
+  required "no evidence → don't invent" behaviour deterministically.
+- **Real adapter**: custom OpenAI-compatible HTTP client (no LiteLLM) with timeout,
+  tenacity backoff retries and explicit 429 handling.
+
 ### D2 — Multi-tenant isolation
-- **RLS in PostgreSQL** (decision #4). Column `tenant_id` on every row + RLS policies;
-  app sets the current tenant per request/connection. Rationale: defense-in-depth, leak
-  resistance even with app-layer bugs. Cost: connection/session tenant binding, slightly
-  more complex local setup — accepted.
+- **RLS in PostgreSQL** (decision #4). Column `tenant_id` on every tenant-owned row;
+  policies `tenant_id = current_setting('app.current_tenant', true)` with `FORCE ROW LEVEL
+  SECURITY`. The app binds the tenant per transaction via `set_config('app.current_tenant',
+  …, true)` (`tenant_session()`); an unset GUC resolves to NULL → **fail-closed** (no rows).
+- **Critical detail:** superusers and `BYPASSRLS` roles ignore RLS even with `FORCE`.
+  So the app connects as a restricted role **`norvia_app`** (`NOSUPERUSER NOBYPASSRLS`,
+  data-only grants, no DDL), while **migrations/admin** use the owner role. This is what
+  makes the cross-tenant isolation test meaningful.
+- Rationale: defense-in-depth, leak resistance even with app-layer bugs. Cost: two DB roles
+  + per-transaction tenant binding — accepted.
 
 ### D3 — Document versioning / deletion
 - **Not yet decided** (was not in the decision card). Proposal to confirm: on re-upload of a
