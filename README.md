@@ -86,6 +86,103 @@ Auth: `X-API-Key: <key>` (see `TENANT_API_KEYS` in `.env.example`) **or**
 | POST | `/ask/stream` | Streaming answer + meta trailer |
 | GET | `/health` | Liveness |
 
+## Observability (OpenTelemetry + structured logs)
+
+One **OpenTelemetry trace** spans the whole request path and — thanks to
+`CeleryInstrumentor` auto-propagating the trace context across the Redis broker — worker
+spans are **children of the API span** that enqueued the task:
+
+```
+API request (FastAPI span)
+  └─ Celery publish span            (context injected into the task message on /upload)
+       └─ Celery task run span      (worker; child across the broker)
+            ├─ DB query spans        (SQLAlchemyInstrumentor)
+            └─ ingestion.embed_chunks (manual span; embeddings)
+
+POST /ask (FastAPI span)
+  ├─ qa.retrieve                     (manual span)
+  │    ├─ retrieval.embed_query      (manual span; embeddings)
+  │    └─ SELECT … chunks            (DB query span)
+  └─ qa.llm.generate                 (manual span; llm.prompt_tokens / completion_tokens)
+```
+
+### Trace setup
+
+- `app/core/telemetry.py` → idempotent `setup_telemetry(service_name)` configures a
+  `TracerProvider`. Exporter is chosen from settings: **console by default**
+  (`OTEL_TRACES_EXPORTER=console`) or **OTLP** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+- Instrumentations: `FastAPIInstrumentor` (API startup), `CeleryInstrumentor` (both
+  producer and worker, so context crosses the broker), `SQLAlchemyInstrumentor` (engine
+  in `app/db/base.py`).
+- Manual spans add the useful attributes: `tenant_id`, per-stage `*latency_ms`,
+  `retrieval.chunk_count`, and `llm.prompt_tokens` / `llm.completion_tokens`.
+
+> SQLAlchemy is pinned `< 2.1` because `opentelemetry-instrumentation-sqlalchemy`
+> only instruments `sqlalchemy < 2.1.0`; without the pin the DB query spans vanish.
+
+### Structured logging + correlation id
+
+- `app/core/logging.py` configures **structlog** (JSON lines). An ASGI middleware
+  (`app/core/middleware.py`) reads `X-Request-ID` (or generates a UUID), binds it via
+  `contextvars`, echoes it back on the `X-Request-ID` response header, and the id flows
+  into **every** log line as `correlation_id`.
+- The id is **propagated into Celery**: `/upload` passes it as a `correlation_id` kwarg to
+  `process_ingestion`, and the worker binds it — so API and worker logs for one ingestion
+  share the same id. `tenant_id` and `job_id` are bound where relevant.
+- **Redaction (Q6.2):** we never log full document content or full user questions. The
+  `redacted_text()` helper logs only `*_len`, an 8-char `*_sha256` and a short `*_preview`.
+
+### Reproduce the trace locally (E6)
+
+```bash
+cp .env.example .env            # OTEL_TRACES_EXPORTER=console by default
+docker compose up --build
+# 1) Get a token and upload a PDF (fake providers, no external keys):
+curl -s -X POST localhost:8000/upload \
+  -H 'X-API-Key: devkey-acme' -F 'file=@backend/corpus/documents/<some>.pdf'
+# 2) Ask a question:
+curl -s -X POST localhost:8000/ask \
+  -H 'X-API-Key: devkey-acme' -H 'Content-Type: application/json' \
+  -d '{"question":"What is the water damage limit?"}'
+# 3) Watch console-exported spans in the api + worker logs:
+docker compose logs -f api worker
+```
+
+### Captured console trace (span tree)
+
+All spans below share one `trace_id` (`0x61f5…93bb`); `parent_id` links reconstruct the
+tree. Key attributes highlighted:
+
+```
+POST /ask                 span=0x9d78… parent=null        tenant_id=acme correlation_id=5f3b1e9c-…
+├─ qa.retrieve            span=0xd030… parent=0x9d78…      tenant_id=acme retrieval.latency_ms=12.4 retrieval.chunk_count=5
+│  ├─ retrieval.embed_query span=0xcd37… parent=0xd030…    embeddings.input_count=1 embeddings.dim=768
+│  └─ SELECT norvia.chunks  span=0x06ea… parent=0xd030…    db.system=postgresql
+└─ qa.llm.generate        span=0xb1c7… parent=0x9d78…      llm.model=fake-deterministic-1 llm.prompt_tokens=19 llm.completion_tokens=11
+```
+
+Raw `ConsoleSpanExporter` output for the LLM span (verbatim):
+
+```json
+{
+    "name": "qa.llm.generate",
+    "context": {
+        "trace_id": "0x61f5a359572e2754ce9fcab663be93bb",
+        "span_id": "0xb1c7bf5c52d70817"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0x9d78efdf85bb9dd6",
+    "attributes": {
+        "tenant_id": "acme",
+        "llm.latency_ms": 3.1,
+        "llm.model": "fake-deterministic-1",
+        "llm.prompt_tokens": 19,
+        "llm.completion_tokens": 11
+    },
+    "resource": { "attributes": { "service.name": "norvia-rag" } }
+}
+```
+
 ## Status
 
 See `SPEC.md` §8 for the requirement → implementation checklist.
@@ -94,7 +191,8 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 - [x] Provider abstraction (fake + real adapter)
 - [x] Frontend (upload / status polling / chat with citations)
 - [x] Tests (unit + integration + RLS isolation against Compose Postgres)
-- [ ] OpenTelemetry end-to-end trace
+- [x] OpenTelemetry end-to-end trace (API → Celery → DB → LLM, context over Redis)
+- [x] Structured logging (structlog) with correlation id + content redaction
 - [x] Evaluation + synthetic corpus (recall@k report via `python -m eval.run`)
 - [x] CI workflow (unit, integration+eval on Compose Postgres, frontend lint/build)
 
@@ -102,5 +200,6 @@ See `SPEC.md` §8 for the requirement → implementation checklist.
 
 - Chunk text is reconstructed from alphanumeric tokens (lowercased) — citations work
   but lose original punctuation/casing. Planned fix: slice original page text by offsets.
-- OpenTelemetry end-to-end wiring is still pending.
+- Traces export to **console** by default (set `OTEL_EXPORTER_OTLP_ENDPOINT` to ship to a
+  collector); no bundled Jaeger/Tempo in the compose stack to keep it light.
 - Frontend is wired (API key → JWT, upload, job polling, `/ask` + citations).

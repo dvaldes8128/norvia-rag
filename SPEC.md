@@ -208,8 +208,10 @@ Cliente (tenant X) --POST /ask { question }--> API
 - [x] R8 Corpus + preguntas (F8.1, F8.2) — `corpus/documents` + `corpus/questions.json`
 - [x] Q1 Tests (unit/integración/aislamiento) — Compose Postgres + RLS fail-closed
 - [x] Q2 Manejo de fallos — corrupt PDF / provider retry / job failed; API error envelope
-- [ ] Q3 OpenTelemetry extremo a extremo
+- [x] Q3 OpenTelemetry extremo a extremo — API→Celery(ctx sobre Redis)→BD→LLM, exporter
+      consola/OTLP (`app/core/telemetry.py`); spans manuales con tenant/latencia/tokens
 - [x] Q4 Seguridad (auth API key+JWT, validación upload, anti prompt-injection en prompt)
 - [x] Q5 Docker Compose único + CI
-- [ ] Q6 Logging estructurado con correlación
-- [ ] E1–E6 Entregables
+- [x] Q6 Logging estructurado con correlación — structlog + `X-Request-ID` propagado a
+      Celery; redacción de contenido/pregunta (len/hash/preview), nunca texto completo
+- [x] E1–E6 Entregables — E6: traza OTel completa documentada en README (captura consola)
