@@ -21,6 +21,7 @@ from uuid import UUID
 from fastapi import Header, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import Settings, settings
 from app.db.models import Tenant, TenantApiKey
@@ -94,7 +95,11 @@ def ensure_tenant(tenant_id: str, *, name: str | None = None) -> None:
 
 
 def lookup_tenant_for_api_key(raw_key: str, *, cfg: Settings | None = None) -> str | None:
-    """Resolve ``tenant_id`` for a raw API key (env map first, then DB hash)."""
+    """Resolve ``tenant_id`` for a raw API key (env map first, then DB hash).
+
+    If Postgres is unreachable, only the env map is consulted (unit tests / degraded
+    mode). DB-issued keys require a live database.
+    """
     cfg = cfg or settings
     key = raw_key.strip()
     if not key:
@@ -105,14 +110,18 @@ def lookup_tenant_for_api_key(raw_key: str, *, cfg: Settings | None = None) -> s
         return env_tenant
 
     digest = hash_api_key(key, cfg=cfg)
-    with admin_session() as session:
-        row = session.scalar(
-            select(TenantApiKey).where(
-                TenantApiKey.key_hash == digest,
-                TenantApiKey.revoked_at.is_(None),
+    try:
+        with admin_session() as session:
+            row = session.scalar(
+                select(TenantApiKey).where(
+                    TenantApiKey.key_hash == digest,
+                    TenantApiKey.revoked_at.is_(None),
+                )
             )
-        )
-        return row.tenant_id if row else None
+            return row.tenant_id if row else None
+    except SQLAlchemyError:
+        # Keep env-key auth working offline; treat DB miss/outage as "unknown key".
+        return None
 
 
 def issue_tenant_api_key(
