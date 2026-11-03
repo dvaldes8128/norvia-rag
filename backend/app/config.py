@@ -53,9 +53,7 @@ class Settings(BaseSettings):
     hybrid_vector_weight: float = 0.6
     hybrid_text_weight: float = 0.4
 
-    # Citations (A = top-N by retrieval score; B = optional lexical grounding)
-    citation_top_n: int = 3
-    citation_lexical_grounding: bool = False
+    # Citation grounding thresholds (B); selection itself is a per-request API param
     citation_min_overlap_tokens: int = 2
     citation_min_overlap_ratio: float = 0.15
 

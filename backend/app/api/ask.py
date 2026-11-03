@@ -35,11 +35,17 @@ def ask(body: AskRequest, principal: CurrentTenant) -> AskResponse:
     logger.info(
         "ask.received",
         tenant_id=principal.tenant_id,
+        citation_top_n=body.citation_top_n,
+        lexical_grounding=body.lexical_grounding,
         **redacted_text("question", body.question),
     )
     with tenant_session(principal.tenant_id) as session:
         payload = answer_question(
-            session, question=body.question, tenant_id=principal.tenant_id
+            session,
+            question=body.question,
+            tenant_id=principal.tenant_id,
+            citation_top_n=body.citation_top_n,
+            lexical_grounding=body.lexical_grounding,
         )
     logger.info(
         "ask.completed",
@@ -68,7 +74,12 @@ def ask_stream(body: AskRequest, principal: CurrentTenant) -> StreamingResponse:
                 parts.append(token)
                 yield token
 
-            payload = payload_from_answer("".join(parts), chunks)
+            payload = payload_from_answer(
+                "".join(parts),
+                chunks,
+                citation_top_n=body.citation_top_n,
+                lexical_grounding=body.lexical_grounding,
+            )
             meta = _to_response(payload)
             yield "\n\n<!--NORVIA_META:"
             yield meta.model_dump_json()

@@ -72,13 +72,11 @@
   page_number, chunk_id, excerpt}]`, `confidence`). Citations are **derived only
   from the retrieval set** and re-checked before return — the model cannot invent
   sources.
-- **Citation selection (A default, B optional):**
-  - **A** — cite the top ``CITATION_TOP_N`` retrieved chunks by fused score
-    (default 3). Avoids attaching every hit as a “source”.
-  - **B** — ``CITATION_LEXICAL_GROUNDING=true`` further keeps only chunks with
-    lexical overlap vs the answer (``CITATION_MIN_OVERLAP_TOKENS`` /
-    ``CITATION_MIN_OVERLAP_RATIO``). If none remain → don't-know. Off by default
-    so the fake LLM path stays predictable; flip on for stricter demos.
+- **Citation selection (per-request on ``POST /ask``):**
+  - **A** — ``citation_top_n`` (default 3): cite that many top fused-score chunks.
+  - **B** — ``lexical_grounding: true``: keep only chunks with lexical overlap vs
+    the answer (thresholds ``CITATION_MIN_OVERLAP_*``). If none remain → don't-know.
+    Default ``false`` so the fake LLM path stays predictable.
 - Insufficient evidence → fixed string *"I don't know based on the provided
   documents."* with empty citations and `confidence=0`.
 - Document text is wrapped in `<<<DOCUMENT_CONTEXT>>>…<<<END_DOCUMENT_CONTEXT>>>`

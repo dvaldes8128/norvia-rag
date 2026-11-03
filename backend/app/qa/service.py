@@ -105,28 +105,21 @@ def select_citation_chunks(
     chunks: list[RetrievedChunk],
     answer: str,
     *,
-    top_n: int | None = None,
-    lexical_grounding: bool | None = None,
+    citation_top_n: int = 3,
+    lexical_grounding: bool = False,
 ) -> list[RetrievedChunk]:
-    """Pick citation sources: A = top-N by score; optional B = lexical filter.
+    """Pick citation sources: A = top-N by score; B = also require lexical overlap.
 
-    When ``lexical_grounding`` is on and no chunk overlaps the answer enough,
+    When ``lexical_grounding`` is True and no chunk overlaps the answer enough,
     returns an empty list (caller should emit don't-know).
     """
     if not chunks:
         return []
-    n = settings.citation_top_n if top_n is None else top_n
-    use_lexical = (
-        settings.citation_lexical_grounding
-        if lexical_grounding is None
-        else lexical_grounding
-    )
     ranked = sorted(chunks, key=lambda c: c.score, reverse=True)
-    candidates = ranked[: max(1, n)] if n > 0 else ranked
-    if not use_lexical:
+    candidates = ranked[: max(1, citation_top_n)]
+    if not lexical_grounding:
         return candidates
-    grounded = [c for c in candidates if chunk_supports_answer(answer, c)]
-    return grounded
+    return [c for c in candidates if chunk_supports_answer(answer, c)]
 
 
 def confidence_for(chunks: list[RetrievedChunk], answer: str) -> float:
@@ -166,8 +159,8 @@ def payload_from_answer(
     answer_text: str,
     chunks: list[RetrievedChunk],
     *,
-    top_n: int | None = None,
-    lexical_grounding: bool | None = None,
+    citation_top_n: int = 3,
+    lexical_grounding: bool = False,
 ) -> AnswerPayload:
     """Assemble a validated answer payload from free-text + retrieved chunks."""
     text = answer_text.strip()
@@ -181,15 +174,10 @@ def payload_from_answer(
     selected = select_citation_chunks(
         chunks,
         text,
-        top_n=top_n,
+        citation_top_n=citation_top_n,
         lexical_grounding=lexical_grounding,
     )
-    use_lexical = (
-        settings.citation_lexical_grounding
-        if lexical_grounding is None
-        else lexical_grounding
-    )
-    if use_lexical and not selected:
+    if lexical_grounding and not selected:
         return AnswerPayload(
             answer=_DONT_KNOW_ANSWER,
             citations=[],
@@ -212,11 +200,15 @@ def answer_question(
     llm: LLMProvider | None = None,
     top_k: int | None = None,
     tenant_id: str | None = None,
+    citation_top_n: int = 3,
+    lexical_grounding: bool = False,
 ) -> AnswerPayload:
     with _tracer.start_as_current_span("qa.retrieve") as span:
         if tenant_id is not None:
             span.set_attribute("tenant_id", tenant_id)
         span.set_attribute("question.len", len(question))
+        span.set_attribute("citation.top_n", citation_top_n)
+        span.set_attribute("citation.lexical_grounding", lexical_grounding)
         started = time.perf_counter()
         chunks = retrieve(session, question=question, top_k=top_k)
         span.set_attribute("retrieval.latency_ms", round((time.perf_counter() - started) * 1000, 2))
@@ -235,4 +227,9 @@ def answer_question(
         span.set_attribute("llm.prompt_tokens", result.prompt_tokens)
         span.set_attribute("llm.completion_tokens", result.completion_tokens)
 
-    return payload_from_answer(result.text, chunks)
+    return payload_from_answer(
+        result.text,
+        chunks,
+        citation_top_n=citation_top_n,
+        lexical_grounding=lexical_grounding,
+    )

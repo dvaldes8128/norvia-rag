@@ -462,6 +462,15 @@ textarea {
   font-style: italic;
 }
 
+.chat__grounding {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted, #5c6570);
+  grid-column: 1 / -1;
+}
+
 .chat__composer {
   display: grid;
   grid-template-columns: 1fr auto;

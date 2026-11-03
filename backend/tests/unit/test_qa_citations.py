@@ -89,7 +89,7 @@ def test_strategy_a_cites_top_n_by_score() -> None:
     selected = select_citation_chunks(
         [low, high, mid],
         "Flood damage is covered up to fifty thousand EUR.",
-        top_n=2,
+        citation_top_n=2,
         lexical_grounding=False,
     )
     assert [c.chunk_id for c in selected] == [high.chunk_id, mid.chunk_id]
@@ -97,7 +97,7 @@ def test_strategy_a_cites_top_n_by_score() -> None:
     payload = payload_from_answer(
         "Flood damage is covered up to fifty thousand EUR.",
         [low, high, mid],
-        top_n=2,
+        citation_top_n=2,
         lexical_grounding=False,
     )
     assert len(payload.citations) == 2
@@ -116,7 +116,7 @@ def test_strategy_b_drops_ungrounded_and_may_dont_know() -> None:
     selected = select_citation_chunks(
         [flood, parking],
         "Flood damage is covered up to fifty thousand EUR under section A.",
-        top_n=2,
+        citation_top_n=2,
         lexical_grounding=True,
     )
     assert [c.chunk_id for c in selected] == [flood.chunk_id]
@@ -124,7 +124,7 @@ def test_strategy_b_drops_ungrounded_and_may_dont_know() -> None:
     invented = payload_from_answer(
         "Extraterrestrial coverage is unlimited.",
         [flood, parking],
-        top_n=2,
+        citation_top_n=2,
         lexical_grounding=True,
     )
     assert invented.citations == []

@@ -48,6 +48,19 @@ export function deleteDocument(documentId: string): Promise<DocumentDeleted> {
   return apiFetch<DocumentDeleted>(`/documents/${documentId}`, { method: "DELETE" });
 }
 
-export function askQuestion(question: string): Promise<AskResponse> {
-  return apiFetch<AskResponse>("/ask", { method: "POST" }, { json: { question } });
+export function askQuestion(
+  question: string,
+  opts?: { citationTopN?: number; lexicalGrounding?: boolean },
+): Promise<AskResponse> {
+  return apiFetch<AskResponse>(
+    "/ask",
+    { method: "POST" },
+    {
+      json: {
+        question,
+        citation_top_n: opts?.citationTopN ?? 3,
+        lexical_grounding: opts?.lexicalGrounding ?? false,
+      },
+    },
+  );
 }

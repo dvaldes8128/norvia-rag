@@ -53,6 +53,9 @@ class CitationOut(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+    # A: cite top-N by retrieval score. B: also require lexical overlap with the answer.
+    citation_top_n: int = Field(default=3, ge=1, le=20)
+    lexical_grounding: bool = False
 
 
 class AskResponse(BaseModel):

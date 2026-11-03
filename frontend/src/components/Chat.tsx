@@ -37,6 +37,7 @@ function Citations({ items }: { items: Citation[] }) {
 export function Chat({ enabled }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
+  const [lexicalGrounding, setLexicalGrounding] = useState(false);
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -59,7 +60,9 @@ export function Chat({ enabled }: Props) {
     setBusy(true);
 
     try {
-      const res: AskResponse = await askQuestion(q);
+      const res: AskResponse = await askQuestion(q, {
+        lexicalGrounding,
+      });
       setMessages((m) => [
         ...m,
         {
@@ -140,6 +143,15 @@ export function Chat({ enabled }: Props) {
             }
           }}
         />
+        <label className="chat__grounding">
+          <input
+            type="checkbox"
+            checked={lexicalGrounding}
+            onChange={(e) => setLexicalGrounding(e.target.checked)}
+            disabled={!enabled || busy}
+          />
+          Lexical grounding (stricter citations)
+        </label>
         <button
           type="submit"
           className="btn btn-primary"
